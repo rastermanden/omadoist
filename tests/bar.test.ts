@@ -12,7 +12,7 @@ function task(id: string, content: string, extra: Partial<Task> = {}): Task {
 }
 
 function cache(tasks: Task[]): Cache {
-  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]] }
+  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "" }
 }
 
 test("rows come out sorted the way the menu sorts them, with display strings ready", () => {
@@ -37,6 +37,21 @@ test("rows come out sorted the way the menu sorts them, with display strings rea
   expect(view.overdue).toBe(1)
   expect(view.today).toBe(1)
   expect(view.filter).toBe("")
+})
+
+test("the projects ride along for the new-task picker, Inbox first", () => {
+  const view = buildBarView(
+    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0" },
+    config,
+    true,
+    now,
+  )
+  expect(view.projects).toEqual([
+    { id: "p0", name: "Inbox", inbox: true },
+    { id: "p1", name: "Work", inbox: false },
+  ])
+  // Nothing to pick from before the account is connected.
+  expect(buildBarView(cache([]), config, false, now).projects).toEqual([])
 })
 
 test("the filter the rows came from is part of the view", () => {

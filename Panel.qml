@@ -78,6 +78,11 @@ Panel {
   property bool filtering: false
   property bool filterBusy: false
   readonly property string filterLabel: Model.filterLabel(view)
+  // The account's projects, Inbox first, as the new-task picker offers them.
+  readonly property var projectOptions: Model.projectOptions(view)
+  // Which project the next task lands in; empty leaves the choice to Todoist.
+  property string composeProject: ""
+  readonly property string composeProjectName: Model.projectName(view, composeProject)
   // null, or {query, message, suggestion} when the last filter change was refused.
   readonly property var filterError: view.filterError
 
@@ -102,6 +107,8 @@ Panel {
     var next = Model.parseView(raw)
     var rewritten = next.generatedAt !== view.generatedAt
     view = next
+    // A project renamed, archived or never synced cannot stay selected.
+    if (Model.projectName(next, composeProject) === "") composeProject = Model.defaultProjectId(next)
     pending = Model.reconcilePending(pending, next.tasks)
     selectedIndex = Model.clampIndex(selectedIndex, next.tasks.length)
     if (rewritten) {
@@ -142,6 +149,9 @@ Panel {
     composing = true
     Qt.callLater(function() {
       addField.text = ""
+      // Assigned rather than bound: the dropdown writes its own `value` when
+      // the user picks, which would break a binding on the first choice.
+      projectPicker.value = root.composeProject
       addField.forceActiveFocus()
     })
   }
@@ -160,7 +170,10 @@ Panel {
     }
     adding = true
     addTimeout.restart()
-    exec([root.command, "add", text])
+    // `--` last, so a task title may start with a dash.
+    var argv = [root.command, "add"]
+    if (root.composeProject !== "") argv = argv.concat(["--project", root.composeProject])
+    exec(argv.concat(["--", text]))
     cancelCompose()
   }
 
@@ -220,6 +233,9 @@ Panel {
       selectedIndex = 0
       composing = false
       filtering = false
+      // Each visit starts at the Inbox; a choice made here sticks for as long
+      // as the panel stays open, so several tasks can go to one project.
+      composeProject = Model.defaultProjectId(view)
     } else {
       composing = false
       filtering = false
@@ -374,7 +390,7 @@ Panel {
       anchors.fill: parent
       // The compose field takes every key while it has focus; Esc there is
       // "cancel the task", not "close the panel".
-      blocked: addField.activeFocus || filterField.activeFocus
+      blocked: addField.activeFocus || filterField.activeFocus || root.composing || projectPicker.popupOpen
 
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
@@ -588,38 +604,65 @@ Panel {
         }
 
         // ---------- New task ----------
-        Row {
-          id: composeRow
+        // Title on top, then where it goes: the project picker carries the
+        // Inbox by default, which is where Todoist would have put it anyway.
+        Column {
+          id: composeBlock
           visible: root.composing
           width: parent.width
           spacing: Style.space(8)
 
+          // Esc cancels from the picker too, not just from the title field.
+          Keys.onEscapePressed: root.cancelCompose()
+
           TextField {
             id: addField
-            width: parent.width - addButton.width - parent.spacing
+            width: parent.width
             placeholderText: "What needs doing?  Enter adds · Esc cancels"
             foreground: root.foreground
             font.family: root.fontFamily
             onAccepted: root.submitCompose()
             Keys.onEscapePressed: root.cancelCompose()
+            // Tab out of the title goes to the one other decision there is.
+            Keys.onTabPressed: projectPicker.open()
           }
 
-          Button {
-            id: addButton
-            text: "Add"
-            iconText: "󰐕"
-            bordered: true
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            anchors.verticalCenter: parent.verticalCenter
-            onClicked: root.submitCompose()
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+
+            SearchableDropdown {
+              id: projectPicker
+              width: parent.width - addButton.width - parent.spacing
+              showLabel: false
+              options: root.projectOptions
+              triggerLabel: "Inbox"
+              placeholderText: "Search projects…"
+              emptyText: "No project like that"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onChanged: function(value) { root.composeProject = value }
+              // Picked or dismissed, the title field gets the keys back.
+              onPopupOpenChanged: if (!popupOpen && root.composing) Qt.callLater(function() { addField.forceActiveFocus() })
+            }
+
+            Button {
+              id: addButton
+              text: "Add"
+              iconText: "󰐕"
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              anchors.verticalCenter: parent.verticalCenter
+              onClicked: root.submitCompose()
+            }
           }
         }
 
         Text {
           visible: root.adding && !root.composing
           width: parent.width
-          text: "Adding…"
+          text: root.composeProjectName === "" ? "Adding…" : "Adding to " + root.composeProjectName + "…"
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

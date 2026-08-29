@@ -20,7 +20,8 @@ repository, and release posts.
 Omadoist puts Todoist in the Omarchy 4 bar. The open-task count sits next
 to the Todoist mark and turns the urgent colour when something is overdue.
 Click it for a panel that lists your tasks with due date, project and
-priority; `Enter` completes one, `n` adds one inline, `f` changes the Todoist
+priority; `Enter` completes one, `n` adds one inline — with a project picker,
+so it lands where it belongs rather than always in the Inbox — `f` changes the Todoist
 filter — any filter query works, and a refused one comes back in words with a
 "did you mean" fix one click away. The same list lives under **Todoist** in
 the Omarchy menu.
@@ -35,7 +36,8 @@ with the keyboard end to end.
 
 - Open-task count in the bar, urgent colour when overdue.
 - Panel: tasks with due date, project and priority; complete with a click or `Enter`.
-- Inline **New task** and **Filter** fields; the full Todoist filter language.
+- Inline **New task** with a searchable project picker, and a **Filter** field
+  taking the full Todoist filter language.
 - Plain-language filter errors with "did you mean …" and a one-click fix.
 - The list under **Todoist** in the Omarchy menu.
 - Notifications only for changes made elsewhere (phone, web).
