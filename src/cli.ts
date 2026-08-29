@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
 import { createInterface } from "node:readline/promises"
 import { buildBarView } from "./bar"
-import { loadCache, saveCache, type Cache } from "./cache"
+import { EMPTY_CACHE, loadCache, saveCache, type Cache } from "./cache"
 import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, CACHE_DIR, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
@@ -14,6 +14,7 @@ import { spawnOptional } from "./proc"
 import { hasProjectToken, withProject } from "./quickadd"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
+import { describeSyncError } from "./sync"
 import { closeTask, fetchLabels, fetchProjects, fetchTasks, quickAddTask, TodoistError, verifyToken, type Task } from "./todoist"
 
 const APP = "Todoist"
@@ -138,7 +139,7 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
   const previous = await loadCache()
 
   if (!token) {
-    await publish({ fetchedAt: "", tasks: [], projects: [], inboxProjectId: "" }, config, false)
+    await publish({ ...EMPTY_CACHE }, config, false)
     // Not an error, just unconfigured: the menu now carries a "Connect
     // Todoist…" row, and the sync timer should not keep failing in the journal.
     console.error("omadoist: not connected — run `omadoist auth`")
@@ -148,11 +149,26 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
 
   // The projects come along on every sync, not just when the menu shows them
   // in a subtitle: the new-task picker is filled from the same cache.
-  const [tasks, projects] = await Promise.all([
-    fetchTasks(token, config.filter, config.limit * 4),
-    fetchProjects(token),
-  ])
-  const choices = projectChoices(projects)
+  let tasks: Task[]
+  let choices: ProjectChoice[]
+  try {
+    const [fetched, projects] = await Promise.all([
+      fetchTasks(token, config.filter, config.limit * 4),
+      fetchProjects(token),
+    ])
+    tasks = fetched
+    choices = projectChoices(projects)
+  } catch (err) {
+    // Nothing used to rewrite bar.json here, so the panel went on showing the
+    // last good list with no sign that it had stopped moving. Keep the tasks —
+    // stale is better than empty — and say why they are stale.
+    const failed: Cache = { ...previous, lastError: describeSyncError(err) }
+    await saveCache(failed)
+    await publish(failed, config, true)
+    // Still an error: the exit code and the journal line are what a timer and
+    // a terminal have to go on.
+    throw err
+  }
 
   // Changes made elsewhere — on the phone, on the web — are worth a heads-up.
   // Not before the first sync, when everything would look new.
@@ -166,6 +182,8 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
     tasks,
     projects: choices.map((choice) => [choice.id, choice.name] as [string, string]),
     inboxProjectId: inboxId(choices),
+    // This sync worked, so whatever the last one complained about is over.
+    lastError: null,
   }
   await saveCache(cache)
 
@@ -403,6 +421,9 @@ async function cmdStatus(): Promise<number> {
   console.log(`menu:    ${MENU_FILE}`)
   console.log(`bar:     ${BAR_FILE}`)
   console.log(`cached:  ${cache.tasks.length} tasks${cache.fetchedAt ? ` at ${cache.fetchedAt}` : ""}`)
+  // The last failure, so the answer to "why is this list old?" is here rather
+  // than only in the journal.
+  if (cache.lastError) console.log(`sync:    failing since ${cache.lastError.at} — ${cache.lastError.message}`)
   return 0
 }
 

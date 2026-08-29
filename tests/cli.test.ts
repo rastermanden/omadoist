@@ -127,6 +127,81 @@ test("a failing sync stays quiet: it runs on a timer, not on a keypress", async 
   expect(notifications).toEqual([])
 })
 
+// --------------------------------------------------------- a sync that fails
+
+test("a failed sync keeps the tasks it had and publishes why they stopped moving", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+  const good = await barView()
+
+  routes = []
+  api(get("/tasks", { status: 500, text: "boom" }), get("/tasks/filter", { status: 500, text: "boom" }))
+  expect(await main(["sync"], fx)).toBe(1)
+
+  const view = await barView()
+  // Stale beats empty: the rows stay, with a reason attached.
+  expect(view.tasks.map((row) => row.id)).toEqual(["1"])
+  expect(view.fetchedAt).toBe(good.fetchedAt)
+  expect(view.syncError).toMatchObject({ kind: "api" })
+  expect(view.syncError!.message).toContain("500")
+})
+
+test("a rejected token is its own kind, since waiting will not fix it", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  routes = []
+  api(get("/tasks", { status: 401 }), get("/tasks/filter", { status: 401 }), get("/projects", { status: 401 }))
+  expect(await main(["sync"], fx)).toBe(1)
+
+  expect((await barView()).syncError).toMatchObject({ kind: "auth", message: "Todoist rejected the API token." })
+})
+
+test("an unreachable Todoist is reported as this machine's side of it", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  globalThis.fetch = (async () => {
+    throw new TypeError("Unable to connect")
+  }) as unknown as typeof fetch
+  expect(await main(["sync"], fx)).toBe(1)
+
+  expect((await barView()).syncError).toMatchObject({ kind: "offline", message: "Can't reach Todoist." })
+})
+
+test("the reason survives a later write from the cache, and only a good sync clears it", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  routes = []
+  api(get("/tasks", { status: 500, text: "boom" }), get("/tasks/filter", { status: 500, text: "boom" }))
+  await main(["sync"], fx)
+
+  // `omadoist menu` rewrites from the cache alone; it must not quietly report
+  // everything as fine.
+  expect(await main(["menu"], fx)).toBe(0)
+  expect((await barView()).syncError).not.toBeNull()
+
+  routes = []
+  connected()
+  expect(await main(["sync"], fx)).toBe(0)
+  expect((await barView()).syncError).toBeNull()
+})
+
+test("a disconnected view has nothing to be stale about", async () => {
+  const { fx } = effects()
+  expect(await main(["sync"], fx)).toBe(0)
+  expect((await barView()).syncError).toBeNull()
+})
+
 // ------------------------------------------------------------------------ sync
 
 test("without a token sync is not an error — it publishes a disconnected view", async () => {

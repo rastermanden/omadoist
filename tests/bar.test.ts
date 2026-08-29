@@ -12,7 +12,7 @@ function task(id: string, content: string, extra: Partial<Task> = {}): Task {
 }
 
 function cache(tasks: Task[]): Cache {
-  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "" }
+  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "", lastError: null }
 }
 
 test("rows come out sorted the way the menu sorts them, with display strings ready", () => {
@@ -41,7 +41,7 @@ test("rows come out sorted the way the menu sorts them, with display strings rea
 
 test("the projects ride along for the new-task picker, Inbox first", () => {
   const view = buildBarView(
-    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0" },
+    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0", lastError: null },
     config,
     true,
     now,
@@ -104,7 +104,7 @@ test("a task still listed after being completed is named as rolled forward", () 
     project_id: "p1",
     due: { date: "2026-08-30", is_recurring: true },
   }
-  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks: [recurring], projects: [["p1", "Livsstil"]], inboxProjectId: "p1" }
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks: [recurring], projects: [["p1", "Livsstil"]], inboxProjectId: "p1", lastError: null }
   const now = new Date("2026-08-29T10:00:00.000Z")
 
   const view = buildBarView(cache, DEFAULT_CONFIG, true, now, null, "r1")
@@ -122,7 +122,7 @@ test("a rolled-forward row is named even when it falls outside the shown limit",
     content: `Task ${i}`,
     due: { date: "2026-09-0" + (i + 1), is_recurring: true },
   }))
-  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks, projects: [], inboxProjectId: "" }
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks, projects: [], inboxProjectId: "", lastError: null }
   const view = buildBarView(cache, { ...DEFAULT_CONFIG, limit: 1 }, true, new Date("2026-08-29T10:00:00.000Z"), null, "t4")
   expect(view.tasks).toHaveLength(1)
   expect(view.rolledForward?.id).toBe("t4")

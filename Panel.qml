@@ -88,6 +88,10 @@ Panel {
   readonly property string composeProjectName: Model.projectName(view, composeProject)
   // null, or {query, message, suggestion} when the last filter change was refused.
   readonly property var filterError: view.filterError
+  // null, or {message, hint, reconnect} when the list on screen is older than
+  // Todoist's. Re-evaluated whenever applyView hands over a fresh view object,
+  // which the 60-second reload below guarantees even when nothing changed.
+  readonly property var syncWarning: Model.syncWarning(view, new Date())
 
   // One cursor shared by keyboard and mouse; rows paint from hasCursor only.
   property bool cursorActive: false
@@ -547,6 +551,43 @@ Panel {
             fontFamily: root.fontFamily
             fontSize: Style.font.bodySmall
             onClicked: root.applyFilter(root.filterError.suggestion)
+          }
+        }
+
+        // ---------- A sync that is not landing: say so rather than show stale rows as current ----------
+        Column {
+          visible: root.syncWarning !== null && !root.filtering && !root.refreshing
+          width: parent.width
+          spacing: Style.space(8)
+
+          Text {
+            width: parent.width
+            text: root.syncWarning ? root.syncWarning.message : ""
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          Text {
+            width: parent.width
+            text: root.syncWarning ? root.syncWarning.hint : ""
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          // Waiting fixes a network blip; it never fixes a rejected token.
+          Button {
+            visible: !!(root.syncWarning && root.syncWarning.reconnect)
+            text: "Reconnect Todoist…"
+            iconText: "󰌷"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            onClicked: root.connectAccount()
           }
         }
 

@@ -26,6 +26,15 @@ drift; bump both in the release commit.
   the panel dropdown or the menu prompt supplies one.
   ([#7](https://github.com/rastermanden/omadoist/issues/7))
 
+- A sync that does not land says so. The failure path keeps the tasks it has —
+  stale beats empty — and publishes why they stopped moving, so the panel can
+  tell "synced a minute ago" from "hasn't reached Todoist since yesterday". A
+  rejected token gets its own wording and a **Reconnect Todoist…** button,
+  since waiting fixes a network blip and never fixes a token; a timer that has
+  simply stopped is reported once the view is three sync runs old.
+  `omadoist status` prints the same reason. Bar view version 3.
+  ([#8](https://github.com/rastermanden/omadoist/issues/8))
+
 ### Changed
 
 - The CLI is one callable function — `main(argv, effects)` behind an
