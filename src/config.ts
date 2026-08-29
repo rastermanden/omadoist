@@ -55,15 +55,77 @@ export const DEFAULT_CONFIG: Config = {
   menuIconFont: "Omadoist Icons",
 }
 
+// A key the user never set is not a complaint; a key set to the wrong type is.
+function asString(value: unknown, key: string, fallback: string, warnings: string[]): string {
+  if (value === undefined) return fallback
+  if (typeof value === "string") return value
+  warnings.push(`${key} should be a string, not ${describe(value)}; using ${JSON.stringify(fallback)}`)
+  return fallback
+}
+
+function asBoolean(value: unknown, key: string, fallback: boolean, warnings: string[]): boolean {
+  if (value === undefined) return fallback
+  if (typeof value === "boolean") return value
+  warnings.push(`${key} should be true or false, not ${describe(value)}; using ${fallback}`)
+  return fallback
+}
+
+/** A count of rows: whole, positive, finite. "25" from a hand edit counts. */
+function asCount(value: unknown, key: string, fallback: number, warnings: string[]): number {
+  if (value === undefined) return fallback
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim() || NaN) : NaN
+  if (Number.isFinite(number) && number >= 1) return Math.floor(number)
+  warnings.push(`${key} should be a positive whole number, not ${describe(value)}; using ${fallback}`)
+  return fallback
+}
+
+function describe(value: unknown): string {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "an array"
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? JSON.stringify(value)
+    : typeof value
+}
+
+/**
+ * The config file is hand-edited, so every key arrives untrusted. A wrong type
+ * used to reach the rest of the program — `{"filter": null}` crashed every
+ * command including `status`, and `{"limit": "lots"}` quietly showed no rows
+ * at all. Each key falls back to its default on its own, with a line saying so.
+ */
+export function sanitizeConfig(raw: unknown): { config: Config; warnings: string[] } {
+  const warnings: string[] = []
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    if (raw !== undefined) warnings.push(`expected a JSON object, found ${describe(raw)}; using defaults`)
+    return { config: { ...DEFAULT_CONFIG }, warnings }
+  }
+
+  const given = raw as Partial<Record<keyof Config, unknown>>
+  const config: Config = {
+    filter: asString(given.filter, "filter", DEFAULT_CONFIG.filter, warnings),
+    limit: asCount(given.limit, "limit", DEFAULT_CONFIG.limit, warnings),
+    showDetails: asBoolean(given.showDetails, "showDetails", DEFAULT_CONFIG.showDetails, warnings),
+    notifyRemoteChanges: asBoolean(given.notifyRemoteChanges, "notifyRemoteChanges", DEFAULT_CONFIG.notifyRemoteChanges, warnings),
+    menuLabel: asString(given.menuLabel, "menuLabel", DEFAULT_CONFIG.menuLabel, warnings),
+    menuIcon: asString(given.menuIcon, "menuIcon", DEFAULT_CONFIG.menuIcon, warnings),
+    menuIconFont: asString(given.menuIconFont, "menuIconFont", DEFAULT_CONFIG.menuIconFont, warnings),
+  }
+  return { config, warnings }
+}
+
 export async function loadConfig(): Promise<Config> {
   const file = Bun.file(CONFIG_FILE)
   if (!(await file.exists())) return { ...DEFAULT_CONFIG }
+  let raw: unknown
   try {
-    return { ...DEFAULT_CONFIG, ...(await file.json()) }
+    raw = await file.json()
   } catch (err) {
     console.error(`omadoist: ignoring unreadable ${CONFIG_FILE} (${err}); using defaults`)
     return { ...DEFAULT_CONFIG }
   }
+  const { config, warnings } = sanitizeConfig(raw)
+  for (const warning of warnings) console.error(`omadoist: ${CONFIG_FILE}: ${warning}`)
+  return config
 }
 
 export async function saveConfig(config: Config): Promise<void> {
@@ -109,5 +171,5 @@ export async function updateConfig(patch: Partial<Config>): Promise<Config> {
   const next = { ...current, ...patch }
   await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 })
   await Bun.write(CONFIG_FILE, JSON.stringify(next, null, 2) + "\n")
-  return { ...DEFAULT_CONFIG, ...next }
+  return sanitizeConfig(next).config
 }
