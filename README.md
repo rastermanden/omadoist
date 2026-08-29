@@ -134,13 +134,21 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
   "showDetails": true,
   "notifyRemoteChanges": true,
   "menuLabel": "Todoist",
-  "menuIcon": "󰄲"
+  "menuIcon": "󰄲",
+  "menuIconFont": ""
 }
 ```
 
 `limit` caps the rows in the menu and the panel (sorted overdue → today →
-later, then priority; the bar count is the full number); `showDetails` adds
-the `due · project` subtitle in the menu. Change the sync interval in
+later, then priority); the bar count is however many tasks the last sync
+fetched — pages of 200 until it holds at least four times `limit` — so an
+account with hundreds of matching tasks counts low, and so does the "N more in
+Todoist" line under the list. `showDetails` adds the `due · project` subtitle
+in the menu. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row
+in the Omarchy menu; the glyph defaults to the Todoist mark, which exists only
+in the `Omadoist Icons` font `setup` installs, so any other glyph — the Nerd
+Font checkbox above, say — needs `menuIconFont` emptied to fall back to the
+shell font. Change the sync interval in
 `~/.config/systemd/user/omadoist-sync.timer` (`OnUnitActiveSec=`), then
 `systemctl --user daemon-reload && systemctl --user restart omadoist-sync.timer`.
 
