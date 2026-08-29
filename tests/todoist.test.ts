@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from "bun:test"
 import {
   closeTask,
-  createTask,
   fetchLabels,
   fetchProjects,
   fetchTasks,
+  quickAddTask,
   TodoistError,
   verifyToken,
 } from "../src/todoist"
@@ -135,17 +135,15 @@ test("an unreachable host is a TodoistError, not a raw fetch failure", async () 
 
 // ------------------------------------------------------------------ writes
 
-test("createTask posts the content, and a project only when there is one", async () => {
-  let calls = stub([json({ id: "9", content: "buy milk" })])
-  const task = await createTask("tok", "buy milk", "p1")
-  expect(task.id).toBe("9")
-  expect(calls[0]!.url.pathname).toBe("/api/v1/tasks")
-  expect(calls[0]!.init.method).toBe("POST")
-  expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ content: "buy milk", project_id: "p1" })
+test("quickAddTask posts the whole line as text and answers with the parsed task", async () => {
+  const calls = stub([json({ id: "9", content: "buy milk", project_id: "p1", priority: 4 })])
+  const task = await quickAddTask("tok", "buy milk tomorrow p1 #Hus @errand")
 
-  calls = stub([json({ id: "10" })])
-  await createTask("tok", "buy milk")
-  expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ content: "buy milk" })
+  expect(calls[0]!.url.pathname).toBe("/api/v1/tasks/quick")
+  expect(calls[0]!.init.method).toBe("POST")
+  expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ text: "buy milk tomorrow p1 #Hus @errand" })
+  // Todoist has taken the date, the priority and the project out of the title.
+  expect(task).toMatchObject({ id: "9", content: "buy milk", project_id: "p1" })
 })
 
 test("closeTask posts to the task's close endpoint with the id escaped", async () => {

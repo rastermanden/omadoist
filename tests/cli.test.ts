@@ -203,6 +203,41 @@ test("done needs an id", async () => {
 
 // ------------------------------------------------------------------------- add
 
+/** Quick Add answers with the parsed task; echo the text back minus the tokens. */
+function quick(projectId = ""): Route {
+  return (url, init) => {
+    if (init.method !== "POST" || url.pathname !== "/api/v1/tasks/quick") return undefined
+    const text = String(JSON.parse(String(init.body)).text)
+    const project = /(?:^|\s)#((?:\\.|[^\s\\])+)/.exec(text)?.[1]?.replace(/\\(.)/g, "$1") ?? ""
+    const landed = PROJECTS.find((candidate) => candidate.name === project)?.id ?? projectId
+    return {
+      body: {
+        id: "7",
+        content: text.replace(/(?:^|\s)#(?:\\.|[^\s\\])+/, "").replace(/\s+p[1-4]\b/, "").trim(),
+        project_id: landed,
+      },
+    }
+  }
+}
+
+/** The `text` the CLI handed to Quick Add. */
+function quickAddText(): string {
+  const posted = requests.find((request) => request.url.pathname === "/api/v1/tasks/quick")
+  return String(JSON.parse(posted!.body).text)
+}
+
+test("the whole line goes to Quick Add, tokens and all", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  requests = []
+  api(quick())
+  expect(await main(["add", "buy", "milk", "tomorrow", "p1", "@errand"], fx)).toBe(0)
+  expect(quickAddText()).toBe("buy milk tomorrow p1 @errand")
+})
+
 test("--project resolves against the cached projects, without a fresh fetch", async () => {
   const { fx } = effects()
   await saveToken("tok")
@@ -210,10 +245,41 @@ test("--project resolves against the cached projects, without a fresh fetch", as
   await main(["sync"], fx)
 
   requests = []
-  api(post("/tasks", { body: { id: "7", content: "Ship it" } }))
+  api(quick())
   expect(await main(["add", "--project", "wo", "Ship", "it"], fx)).toBe(0)
 
-  expect(JSON.parse(requests[0]!.body)).toEqual({ content: "Ship it", project_id: "p1" })
+  expect(quickAddText()).toBe("Ship it #Work")
+  // Straight to the add: the cache already knew the project. (The /projects
+  // call after it belongs to the re-sync.)
+  expect(requests[0]!.url.pathname).toBe("/api/v1/tasks/quick")
+})
+
+test("a project name with a space is escaped the way Quick Add reads it", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  api(
+    get("/tasks", { body: { results: [] } }),
+    get("/tasks/filter", { body: { results: [] } }),
+    get("/projects", { body: { results: [...PROJECTS, { id: "p3", name: "Sommerhus 2026" }] } }),
+  )
+  await main(["sync"], fx)
+
+  requests = []
+  api(quick())
+  expect(await main(["add", "--project", "Sommerhus 2026", "Male", "gavlen"], fx)).toBe(0)
+  expect(quickAddText()).toBe("Male gavlen #Sommerhus\\ 2026")
+})
+
+test("a #Project in the text wins over the picker the panel always sends", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  requests = []
+  api(quick())
+  expect(await main(["add", "--project", "Inbox", "--", "Fix the sink #Work"], fx)).toBe(0)
+  expect(quickAddText()).toBe("Fix the sink #Work")
 })
 
 test("a project made since the last sync is worth one fresh look", async () => {
@@ -226,14 +292,12 @@ test("a project made since the last sync is worth one fresh look", async () => {
   routes = []
   api(
     get("/projects", { body: { results: [...PROJECTS, { id: "p2", name: "Garden" }] } }),
-    post("/tasks", { body: { id: "8" } }),
+    quick(),
     get("/tasks", { body: { results: [] } }),
     get("/tasks/filter", { body: { results: [] } }),
   )
   expect(await main(["add", "--project", "Garden", "Sow", "beans"], fx)).toBe(0)
-
-  const created = requests.find((request) => request.method === "POST")!
-  expect(JSON.parse(created.body)).toEqual({ content: "Sow beans", project_id: "p2" })
+  expect(quickAddText()).toBe("Sow beans #Garden")
 })
 
 test("a project name nothing matches is refused rather than filed anywhere", async () => {
@@ -257,11 +321,25 @@ test("no text on the command line asks for both the text and the project", async
   await main(["sync"], fx)
 
   requests = []
-  api(post("/tasks", { body: { id: "9" } }))
+  api(quick())
   expect(await main(["add"], fx)).toBe(0)
 
   expect(commands.map((command) => command[0])).toEqual(["omarchy-menu-input", "omarchy-menu-select"])
-  expect(JSON.parse(requests[0]!.body)).toEqual({ content: "Buy milk", project_id: "p1" })
+  expect(quickAddText()).toBe("Buy milk #Work")
+})
+
+test("a #Project typed into the prompt skips the picker entirely", async () => {
+  const { fx, commands } = effects({ "omarchy-menu-input": { stdout: "Buy milk #Work tomorrow" } })
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  requests = []
+  api(quick())
+  expect(await main(["add"], fx)).toBe(0)
+
+  expect(commands.map((command) => command[0])).toEqual(["omarchy-menu-input"])
+  expect(quickAddText()).toBe("Buy milk #Work tomorrow")
 })
 
 test("cancelling either prompt adds nothing", async () => {
@@ -290,9 +368,9 @@ test("a shell with no picker files the task in the Inbox rather than failing", a
   await main(["sync"], fx)
 
   requests = []
-  api(post("/tasks", { body: { id: "9" } }))
+  api(quick("p0"))
   expect(await main(["add"], fx)).toBe(0)
-  expect(JSON.parse(requests[0]!.body)).toEqual({ content: "Buy milk" })
+  expect(quickAddText()).toBe("Buy milk")
 })
 
 test("an account with only an Inbox is not asked about", async () => {
@@ -306,10 +384,24 @@ test("an account with only an Inbox is not asked about", async () => {
   await main(["sync"], fx)
 
   requests = []
-  api(post("/tasks", { body: { id: "9" } }))
+  api(quick())
   expect(await main(["add"], fx)).toBe(0)
   expect(commands.map((command) => command[0])).toEqual(["omarchy-menu-input"])
-  expect(JSON.parse(requests[0]!.body)).toEqual({ content: "Buy milk", project_id: "p0" })
+  expect(quickAddText()).toBe("Buy milk #Inbox")
+})
+
+test("the added task is not reported back as remote news", async () => {
+  const { fx, notifications } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  routes = []
+  api(quick(), get("/tasks", { body: { results: [TASK, { id: "7", content: "Ship it" }] } }),
+      get("/tasks/filter", { body: { results: [TASK, { id: "7", content: "Ship it" }] } }),
+      get("/projects", { body: { results: PROJECTS } }))
+  expect(await main(["add", "Ship", "it"], fx)).toBe(0)
+  expect(notifications).toEqual([])
 })
 
 // ---------------------------------------------------------------------- filter
