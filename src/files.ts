@@ -1,7 +1,20 @@
-// One file habit the rest of the tool depends on: no reader ever sees half of
-// what we write.
-import { chmod, rename, unlink } from "node:fs/promises"
+// Two file habits the rest of the tool depends on: nobody else can read what
+// we write, and no reader ever sees half of it.
+import { chmod, mkdir, rename, unlink } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
+
+/**
+ * Create a private directory, and make an existing one private too: `mkdir`
+ * applies its mode only when it creates, so a directory left behind by an
+ * earlier install keeps whatever the umask gave it.
+ */
+export async function ensureDir(dir: string, mode = 0o700): Promise<void> {
+  await mkdir(dir, { recursive: true, mode })
+  await chmod(dir, mode).catch(() => {
+    // Someone else's directory (a shared XDG root): ours to write in, not to
+    // re-permission.
+  })
+}
 
 let sequence = 0
 

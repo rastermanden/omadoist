@@ -1,6 +1,7 @@
-import { chmod, mkdir } from "node:fs/promises"
+import { chmod } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { ensureDir } from "./files"
 
 const HOME = homedir()
 const XDG_CONFIG = process.env.XDG_CONFIG_HOME || join(HOME, ".config")
@@ -129,7 +130,7 @@ export async function loadConfig(): Promise<Config> {
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 })
+  await ensureDir(CONFIG_DIR)
   await Bun.write(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n")
 }
 
@@ -146,7 +147,7 @@ export async function loadToken(): Promise<string | null> {
 // The token is a bearer credential for the whole account, so it never lands in
 // a world-readable file.
 export async function saveToken(token: string): Promise<void> {
-  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 })
+  await ensureDir(CONFIG_DIR)
   await Bun.write(TOKEN_FILE, token.trim() + "\n")
   await chmod(TOKEN_FILE, 0o600)
 }
@@ -169,7 +170,7 @@ export async function updateConfig(patch: Partial<Config>): Promise<Config> {
     }
   }
   const next = { ...current, ...patch }
-  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 })
+  await ensureDir(CONFIG_DIR)
   await Bun.write(CONFIG_FILE, JSON.stringify(next, null, 2) + "\n")
   return sanitizeConfig(next).config
 }

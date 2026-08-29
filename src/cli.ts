@@ -6,8 +6,8 @@ import { buildBarView } from "./bar"
 import { loadCache, saveCache, type Cache } from "./cache"
 import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
-import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
-import { writeAtomic } from "./files"
+import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, CACHE_DIR, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
+import { ensureDir, writeAtomic } from "./files"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
 import { spawnOptional } from "./proc"
@@ -58,10 +58,11 @@ async function writeMenu(cache: Cache, config: Config, authenticated: boolean): 
 // sort order and due labels in QML: the CLI is the one place that knows them.
 // It watches with watchChanges: true, so a read must never land mid-write — a
 // truncated document fails to parse and the panel falls back to "not
-// connected" — hence the atomic rename.
+// connected" — hence the atomic rename. The directory is private for the same
+// reason the cache is: these rows are the user's task titles.
 async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null): Promise<void> {
-  await mkdir(dirname(BAR_FILE), { recursive: true })
-  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)))
+  await ensureDir(CACHE_DIR)
+  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)), 0o600)
 }
 
 // Menu block and bar view always change together.
