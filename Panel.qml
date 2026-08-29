@@ -72,6 +72,9 @@ Panel {
   // Task id → true while `omadoist done` is in flight. The row stays put,
   // ticked and struck through, until the next bar.json no longer lists it.
   property var pending: ({})
+  // The recurring task the last completion rolled forward. It never leaves the
+  // list, so the tick has to be released on a timer instead.
+  property string rolledForwardId: ""
   property bool refreshing: false
   property bool adding: false
   property bool composing: false
@@ -110,6 +113,17 @@ Panel {
     // A project renamed, archived or never synced cannot stay selected.
     if (Model.projectName(next, composeProject) === "") composeProject = Model.defaultProjectId(next)
     pending = Model.reconcilePending(pending, next.tasks)
+
+    // A completed recurring task comes back with its next due date. Hold the
+    // tick a moment longer, now showing where it went, so the row returning
+    // reads as "done, see you Tuesday" rather than as nothing having happened.
+    var rolled = rewritten ? Model.justRolledForward(next, new Date()) : null
+    if (rolled) {
+      rolledForwardId = rolled.id
+      pending = Model.withPending(pending, rolled.id)
+      rolledForwardTimeout.restart()
+    }
+
     selectedIndex = Model.clampIndex(selectedIndex, next.tasks.length)
     if (rewritten) {
       refreshing = false
@@ -280,6 +294,17 @@ Panel {
     id: pendingTimeout
     interval: 20000
     onTriggered: root.pending = ({})
+  }
+
+  // Long enough to read the new due date, short enough that the row is honest
+  // again before the next glance.
+  Timer {
+    id: rolledForwardTimeout
+    interval: 4000
+    onTriggered: {
+      root.pending = Model.clearPending(root.pending, root.rolledForwardId)
+      root.rolledForwardId = ""
+    }
   }
 
   Timer {

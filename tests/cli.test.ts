@@ -373,6 +373,27 @@ test("a shell with no picker files the task in the Inbox rather than failing", a
   expect(quickAddText()).toBe("Buy milk")
 })
 
+test("a machine with no menu at all cannot be asked for the text, and says so", async () => {
+  // Nothing answers: omarchy-menu-input is not installed either (code 127).
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  requests = []
+  expect(await main(["add"], fx)).toBe(1)
+  expect(requests.some((request) => request.method === "POST")).toBe(false)
+})
+
+test("filter --edit without the menu points at the arguments instead", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+
+  expect(await main(["filter", "--edit"], fx)).toBe(1)
+  expect(await Bun.file(CONFIG_FILE).exists()).toBe(false)
+})
+
 test("an account with only an Inbox is not asked about", async () => {
   const { fx, commands } = effects({ "omarchy-menu-input": { stdout: "Buy milk" } })
   await saveToken("tok")
