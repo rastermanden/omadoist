@@ -9,20 +9,25 @@ import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
+import { spawnOptional } from "./proc"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
 import { closeTask, createTask, fetchLabels, fetchProjects, fetchTasks, TodoistError, verifyToken, type Task } from "./todoist"
 
 const APP = "Todoist"
 
+// notify-send and the Omarchy menu binaries are conveniences: a machine
+// without them still syncs. spawnOptional keeps a missing binary from throwing
+// past the work that matters — the notify below used to abort cmdSync before
+// it ever reached saveCache, freezing the widget on stale data.
 function notify(title: string, body = "", urgency: "low" | "normal" | "critical" = "low") {
-  Bun.spawn(["notify-send", "-a", APP, "-u", urgency, title, body], {
+  spawnOptional(["notify-send", "-a", APP, "-u", urgency, title, body], {
     stdio: ["ignore", "ignore", "ignore"],
-  }).unref()
+  })?.unref()
 }
 
 async function run(command: string[]): Promise<void> {
-  await Bun.spawn(command, { stdio: ["ignore", "ignore", "ignore"] }).exited
+  await spawnOptional(command, { stdio: ["ignore", "ignore", "ignore"] })?.exited
 }
 
 async function requireToken(): Promise<string> {
@@ -165,15 +170,11 @@ async function cmdDone(args: string[]): Promise<number> {
 async function askProject(choices: ProjectChoice[]): Promise<{ cancelled: boolean; choice: ProjectChoice | null }> {
   if (choices.length < 2) return { cancelled: false, choice: choices[0] ?? null }
 
-  let picker
-  try {
-    picker = Bun.spawn(["omarchy-menu-select", "Project", ...choices.map((choice) => choice.name), "--", "--width", "460"], {
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-  } catch {
-    return { cancelled: false, choice: null }
-  }
+  const picker = spawnOptional(["omarchy-menu-select", "Project", ...choices.map((choice) => choice.name), "--", "--width", "460"], {
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+  if (!picker) return { cancelled: false, choice: null }
 
   const answer = (await new Response(picker.stdout).text()).trim()
   if ((await picker.exited) !== 0 || !answer) return { cancelled: true, choice: null }
@@ -208,7 +209,11 @@ async function cmdAdd(args: string[]): Promise<number> {
   if (!content) {
     // No text on the command line means the menu triggered it: ask through the
     // same Quickshell menu the user is already looking at.
-    const prompt = Bun.spawn(["omarchy-menu-input", "New task"], { stdout: "pipe", stderr: "ignore" })
+    const prompt = spawnOptional(["omarchy-menu-input", "New task"], { stdout: "pipe", stderr: "ignore" })
+    if (!prompt) {
+      console.error("omadoist: no task text, and omarchy-menu-input is not installed to ask for it")
+      return 1
+    }
     content = (await new Response(prompt.stdout).text()).trim()
     if ((await prompt.exited) !== 0 || !content) return 0 // cancelled
 
@@ -247,7 +252,11 @@ async function cmdFilter(args: string[]): Promise<number> {
     // From the menu or the panel: ask through the Omarchy menu, with the
     // current filter in the prompt since the input cannot be prefilled.
     const prompt = `Todoist filter — now: ${config.filter || "all"}  (all = no filter)`
-    const input = Bun.spawn(["omarchy-menu-input", prompt, "--width", "560"], { stdout: "pipe", stderr: "ignore" })
+    const input = spawnOptional(["omarchy-menu-input", prompt, "--width", "560"], { stdout: "pipe", stderr: "ignore" })
+    if (!input) {
+      console.error("omadoist: omarchy-menu-input is not installed — pass the filter as arguments instead")
+      return 1
+    }
     const text = (await new Response(input.stdout).text()).trim()
     if ((await input.exited) !== 0) return 0 // cancelled
     query = normalizeFilter(text)

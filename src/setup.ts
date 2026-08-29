@@ -5,6 +5,7 @@
 import { chmod, mkdir, readlink, rm, symlink, unlink } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
+import { spawnOptional } from "./proc"
 
 const HOME = homedir()
 const XDG_CONFIG = process.env.XDG_CONFIG_HOME || join(HOME, ".config")
@@ -18,9 +19,12 @@ export const UNITS = ["omadoist-sync.service", "omadoist-sync.timer"] as const
 export const CACHE_HOME = join(process.env.XDG_CACHE_HOME || join(HOME, ".cache"), "omadoist")
 export const CONFIG_HOME = join(XDG_CONFIG, "omadoist")
 
+// systemctl and fc-cache are not guaranteed to exist (a container, a non-systemd
+// box): a missing one costs the timer or the font cache, not the whole setup —
+// and never a half-finished uninstall.
 async function run(command: string[], quiet = true): Promise<number> {
-  const proc = Bun.spawn(command, { stdio: ["ignore", quiet ? "ignore" : "inherit", quiet ? "ignore" : "inherit"] })
-  return proc.exited
+  const proc = spawnOptional(command, { stdio: ["ignore", quiet ? "ignore" : "inherit", quiet ? "ignore" : "inherit"] })
+  return proc ? proc.exited : 127
 }
 
 async function exists(path: string): Promise<boolean> {
