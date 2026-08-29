@@ -24,6 +24,19 @@ export type BarTask = {
   url: string
 }
 
+/**
+ * A task that was just completed and came straight back: Todoist rolls a
+ * recurring task forward to its next occurrence instead of closing it. Without
+ * this the row simply reappears, which reads as a failed completion — and
+ * clicking again advances the schedule another step.
+ */
+export type RolledForward = {
+  id: string
+  title: string
+  /** The new due label, already formatted ("Tomorrow ↻"). */
+  due: string
+}
+
 export type BarView = {
   version: typeof BAR_VIEW_VERSION
   /** When this file was written — changes on every write, unlike fetchedAt. */
@@ -40,6 +53,8 @@ export type BarView = {
    * since yesterday".
    */
   syncError: SyncError | null
+  /** Set by the sync after a completion when the task rolled forward; cleared by the next write. */
+  rolledForward: RolledForward | null
   connected: boolean
   /** The account's projects, Inbox first, for the new-task picker. */
   projects: ProjectChoice[]
@@ -99,6 +114,8 @@ export function buildBarView(
   connected: boolean,
   now = new Date(),
   filterError: FilterError | null = null,
+  /** Task just completed, so a row that survives the sync can be named as rolled forward. */
+  completedId = "",
 ): BarView {
   const view: BarView = {
     version: BAR_VIEW_VERSION,
@@ -109,6 +126,7 @@ export function buildBarView(
     filterError,
     // Nothing to be stale about before the account is connected.
     syncError: connected ? cache.lastError : null,
+    rolledForward: null,
     projects: [],
     count: 0,
     overdue: 0,
@@ -125,5 +143,13 @@ export function buildBarView(
   view.overdue = rows.filter((row) => row.overdue).length
   view.today = rows.filter((row) => row.today).length
   view.tasks = rows.slice(0, Math.max(1, config.limit))
+
+  // Still listed after being completed: Todoist moved it to its next
+  // occurrence. Named here even when the row falls outside the limit, so the
+  // panel can say so either way.
+  if (completedId) {
+    const survivor = rows.find((row) => row.id === completedId)
+    if (survivor) view.rolledForward = { id: survivor.id, title: survivor.title, due: survivor.due }
+  }
   return view
 }

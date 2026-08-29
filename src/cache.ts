@@ -1,5 +1,5 @@
-import { mkdir } from "node:fs/promises"
 import { CACHE_DIR, CACHE_FILE } from "./config"
+import { ensureDir, writeAtomic } from "./files"
 import { parseSyncError, type SyncError } from "./sync"
 import type { Task } from "./todoist"
 
@@ -38,7 +38,11 @@ export async function loadCache(): Promise<Cache> {
   }
 }
 
+// The cache holds every task title, due date and project name the filter
+// matches, so it is written as privately as the token that fetched it — and
+// atomically, since a sync, a `done` and a filter change can all publish at
+// once and a half-written file reads as no tasks at all.
 export async function saveCache(cache: Cache): Promise<void> {
-  await mkdir(CACHE_DIR, { recursive: true })
-  await Bun.write(CACHE_FILE, JSON.stringify(cache))
+  await ensureDir(CACHE_DIR)
+  await writeAtomic(CACHE_FILE, JSON.stringify(cache), 0o600)
 }
