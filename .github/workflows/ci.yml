@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+
+      # The CLI has no runtime dependencies; dev dependencies are only the
+      # font toolchain and Bun's types.
+      - run: bun install --frozen-lockfile || bun install
+      - run: bun test
+      - run: bunx tsc --noEmit
+
+      # The same shape checks `omarchy plugin validate` makes, minus the ones
+      # that need Omarchy on the runner: schemaVersion 1, required fields, an
+      # id outside the reserved namespace, entry points that exist and are
+      # relative, and no symlinks in the tree that gets cloned.
+      - name: Check the manifest
+        run: |
+          set -eu
+          jq -e '.schemaVersion == 1' manifest.json
+          for f in id name version author description kinds entryPoints; do jq -e --arg f "$f" 'has($f)' manifest.json >/dev/null; done
+          id=$(jq -r .id manifest.json)
+          case "$id" in omarchy.*) echo "reserved id $id" >&2; exit 1;; esac
+          for ep in $(jq -r '.entryPoints[]' manifest.json); do
+            case "$ep" in /*|*..*) echo "unsafe entry point $ep" >&2; exit 1;; esac
+            test -f "$ep"
+          done
+          if find . -path ./node_modules -prune -o -path ./.git -prune -o -type l -print | grep -q .; then
+            echo "symlinks are not allowed in a plugin" >&2; exit 1
+          fi
+          test "$(jq -r .version manifest.json)" = "$(jq -r .version package.json)"

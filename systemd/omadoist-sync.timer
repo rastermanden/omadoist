@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh the Todoist rows in the Omarchy menu every 5 minutes
+
+[Timer]
+OnStartupSec=30s
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

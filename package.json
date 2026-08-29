@@ -1,0 +1,20 @@
+{
+  "name": "omadoist",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Todoist in the Omarchy bar and menu: list your tasks and tick them done",
+  "bin": {
+    "omadoist": "bin/omadoist"
+  },
+  "scripts": {
+    "test": "bun test",
+    "build:font": "bun run scripts/build-icon-font.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/svg2ttf": "^5.0.3",
+    "svg2ttf": "^6.1.0",
+    "svgicons2svgfont": "^16.0.0"
+  }
+}

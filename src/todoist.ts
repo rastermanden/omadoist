@@ -1,0 +1,125 @@
+const API = "https://api.todoist.com/api/v1"
+const PAGE_SIZE = 200
+
+export type Due = {
+  date?: string
+  datetime?: string
+  string?: string
+  is_recurring?: boolean
+}
+
+export type Task = {
+  id: string
+  content: string
+  description?: string
+  project_id?: string
+  priority?: number // 4 = p1 (highest) … 1 = p4
+  child_order?: number
+  due?: Due | null
+  labels?: string[]
+  url?: string
+}
+
+export type Project = { id: string; name: string }
+
+export class TodoistError extends Error {
+  constructor(
+    message: string,
+    readonly status = 0,
+    /** Raw response body, for callers that can explain an error better than the API does. */
+    readonly body = "",
+  ) {
+    super(message)
+    this.name = "TodoistError"
+  }
+}
+
+async function request(token: string, path: string, init?: RequestInit): Promise<unknown> {
+  let res: Response
+  try {
+    res = await fetch(API + path, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch (err) {
+    throw new TodoistError(`cannot reach api.todoist.com (${err})`)
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new TodoistError("Todoist rejected the API token — run `omadoist auth` again", res.status)
+  }
+  if (!res.ok) {
+    const body = await res.text()
+    throw new TodoistError(`Todoist API ${res.status}: ${body.slice(0, 300)}`, res.status, body)
+  }
+
+  const body = await res.text()
+  return body ? JSON.parse(body) : null
+}
+
+// List endpoints answer `{results, next_cursor}`, but a few deployments still
+// hand back a bare array. Accept either.
+function rowsOf(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  const results = (payload as { results?: unknown })?.results
+  return Array.isArray(results) ? results : []
+}
+
+function cursorOf(payload: unknown): string | null {
+  if (Array.isArray(payload)) return null
+  const next = (payload as { next_cursor?: unknown })?.next_cursor
+  return typeof next === "string" && next ? next : null
+}
+
+async function paginate(token: string, path: string, params: Record<string, string>, max: number) {
+  const collected: unknown[] = []
+  let cursor: string | null = null
+
+  do {
+    const query = new URLSearchParams({ ...params, limit: String(PAGE_SIZE) })
+    if (cursor) query.set("cursor", cursor)
+    const payload = await request(token, `${path}?${query}`)
+    collected.push(...rowsOf(payload))
+    cursor = cursorOf(payload)
+  } while (cursor && collected.length < max)
+
+  return collected
+}
+
+export async function fetchTasks(token: string, filter: string, max: number): Promise<Task[]> {
+  const query = filter.trim()
+  const rows = query
+    ? await paginate(token, "/tasks/filter", { query }, max)
+    : await paginate(token, "/tasks", {}, max)
+  return rows as Task[]
+}
+
+export async function fetchProjects(token: string): Promise<Map<string, string>> {
+  const rows = (await paginate(token, "/projects", {}, 1000)) as Project[]
+  return new Map(rows.map((project) => [String(project.id), project.name]))
+}
+
+export async function fetchLabels(token: string): Promise<string[]> {
+  const rows = (await paginate(token, "/labels", {}, 1000)) as { name?: string }[]
+  return rows.map((label) => String(label.name ?? "")).filter(Boolean)
+}
+
+export async function closeTask(token: string, id: string): Promise<void> {
+  await request(token, `/tasks/${encodeURIComponent(id)}/close`, { method: "POST" })
+}
+
+export async function createTask(token: string, content: string): Promise<Task> {
+  return (await request(token, "/tasks", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  })) as Task
+}
+
+/** Cheap round-trip used to validate a token before it is written to disk. */
+export async function verifyToken(token: string): Promise<void> {
+  await request(token, "/tasks?limit=1")
+}

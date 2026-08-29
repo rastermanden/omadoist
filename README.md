@@ -1,0 +1,193 @@
+# Omadoist
+
+![Omadoist in the Omarchy bar](preview.png)
+
+**Todoist in your Omarchy bar.** The open-task count sits next to the Todoist
+mark; click it for a panel that lists your tasks, ticks them off in place, adds
+new ones, and switches filters — all keyboard-driven and themed like the rest
+of the shell. The same list lives under **Todoist** in the Omarchy menu.
+
+## What you get
+
+- Open-task count in the bar, in the urgent colour when something is overdue.
+- A panel with your tasks: due date, project, priority; `Enter` completes.
+- Inline **New task** (`n`) and **Filter** (`f`) fields; the whole Todoist
+  filter language works, with a plain-language "did you mean …" when it doesn't.
+- The list under **Todoist** in the Omarchy menu, so `Super+Space` → "todo"
+  finds it too.
+- A five-minute background sync, and notifications only for tasks added or
+  completed *somewhere else* — never for what you just did here.
+- Your API token stays in a mode-600 file; the widget itself never sees it.
+
+## Install
+
+```bash
+omarchy plugin add https://github.com/rastermanden/omadoist.git --enable --yes
+```
+
+Then click the checkbox in the bar and choose **Set up Todoist…**. That runs
+`omadoist setup` in a terminal: it installs the icon font, the sync timer,
+the menu rows and a launcher on your PATH. Then choose **Connect Todoist…** and paste the token from
+[Todoist → Settings → Integrations → Developer](https://app.todoist.com/app/settings/integrations/developer).
+
+Requires Omarchy 4+ and [bun](https://bun.sh) (`omarchy pkg add bun`).
+
+From a checkout instead:
+
+```bash
+./install.sh          # copies a clean tree into ~/.config/omarchy/plugins/omadoist and runs setup
+./uninstall.sh        # removes timer, font, menu rows, launcher and the plugin; keeps your token
+```
+
+Update a published install with `omarchy plugin update omadoist`. Remove it
+with `omadoist uninstall && omarchy plugin remove omadoist` — that keeps
+your token and config for a later reinstall; `omadoist uninstall --purge`
+removes those too.
+
+## Using it
+
+| Where | Does |
+| --- | --- |
+| Bar glyph, left click | open / close the panel |
+| Bar glyph, right click | open the panel straight into **New task** |
+| Bar glyph, middle click | re-sync |
+| Row, click / `Enter` / `Space` | complete the task |
+| Row, right click | open the task in Todoist |
+| `j` `k` / arrows | move the cursor |
+| `n` | new task (`Enter` adds, `Esc` cancels) |
+| `f` (or click the filter line) | change the Todoist filter; empty = all tasks |
+| `r` | re-sync |
+| `o` | open Todoist |
+| `Tab` / `Esc` | next panel / close |
+
+A completed row stays ticked and struck through until the next sync drops it.
+
+Keyboard shortcut — add to `~/.config/hypr/bindings.lua` (`SUPER+CTRL+T` is
+Omarchy's own Activity binding, so the ALT layer):
+
+```lua
+o.bind("SUPER + ALT + T", "Todoist", "omarchy-shell shell toggle omadoist")
+```
+
+Scriptable over shell IPC: `omarchy-shell omadoist refresh|add|filter|toggle`.
+
+### Filters
+
+Any [Todoist filter query](https://todoist.com/help/articles/introduction-to-filters):
+`today | overdue`, `next 7 days & #Work`, `p1 | (p2 & next 7 days)`, `no date`,
+`search: milk`, `@errand`, `!subtask` …
+
+Set it with `f` in the panel, the **Filter…** menu row, or
+`omadoist filter "today | overdue"` (`--clear`, or `all`, for none). Every
+route checks the query with Todoist before saving it, and a refused one comes
+back in words with a fix one click away: `todya | overdeu` → *Did you mean
+“today | overdue”?*, `today or overdue` → `today | overdue`, `#Livstil` →
+`#Livsstil`. A project or label that doesn't exist gets a nudge too, since
+Todoist accepts it and simply matches nothing. Changing the filter never
+triggers a "remote changes" notification.
+
+### Notifications
+
+`omadoist sync` diffs each fetch against the previous one. Tasks that
+appeared or vanished without this machine doing it produce one notification —
+*Todoist · 2 new, 1 done* with the titles. Completing or adding a task here is
+silent; failures always notify. Turn it off with `"notifyRemoteChanges": false`
+in `~/.config/omadoist/config.json`. Caveat: with a date-based filter, a task
+that stops matching looks like "done" to the diff.
+
+## Settings
+
+Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
+(`omarchy bar set omadoist <key> <value>`, or Setup → Plugins):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `showCount` | `true` | open-task count next to the glyph |
+| `hideWhenEmpty` | `false` | hide the widget when nothing is open |
+| `icon` | `` | glyph; any Nerd Font glyph once `iconFont` is cleared |
+| `iconFont` | `Omadoist Icons` | font the glyph is drawn with; empty = bar font |
+| `command` | `bin/omadoist` in the plugin | the launcher the panel shells out to |
+
+`~/.config/omadoist/config.json` (all optional):
+
+```json
+{
+  "filter": "today | overdue",
+  "limit": 25,
+  "showDetails": true,
+  "notifyRemoteChanges": true,
+  "menuLabel": "Todoist",
+  "menuIcon": "󰄲"
+}
+```
+
+`limit` caps the rows in the menu and the panel (sorted overdue → today →
+later, then priority; the bar count is the full number); `showDetails` adds
+the `due · project` subtitle in the menu. Change the sync interval in
+`~/.config/systemd/user/omadoist-sync.timer` (`OnUnitActiveSec=`), then
+`systemctl --user daemon-reload && systemctl --user restart omadoist-sync.timer`.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `omadoist setup` / `uninstall [--purge]` | Install / remove the font, timer, menu rows, launcher and cache; `--purge` also removes token and config |
+| `omadoist auth [token]` | Store the API token (mode 600) and sync |
+| `omadoist sync [--open]` | Fetch tasks, rewrite the menu block and the bar view |
+| `omadoist done <task-id>` | Complete a task and re-sync |
+| `omadoist add [text…]` | Add a task; with no text it prompts through the menu |
+| `omadoist filter [query]` | Show or set the filter (`--clear`, `--edit`) |
+| `omadoist list` / `status` | Print the cached tasks / where everything is |
+| `omadoist menu` | Rewrite the menu block and bar view from cache only |
+| `omadoist unlink-menu` | Remove the generated menu block |
+
+## How it works
+
+`omadoist sync` (systemd user timer, every five minutes) fetches your tasks
+and writes two things: a generated block between `// >>> omadoist:begin` and
+`// <<< omadoist:end` in `~/.config/omarchy/extensions/omarchy-menu.jsonc`
+(the only way to extend the menu; everything outside the markers is yours),
+and `~/.cache/omadoist/bar.json`, a pre-sorted, pre-formatted view of the
+same tasks. `Panel.qml` watches that file and shells out to the bundled CLI
+for every action, so the menu, the bar and the terminal can never disagree,
+and the QML never touches the network or the token.
+
+The Todoist mark ships as a one-glyph font (`assets/omadoist-icons.ttf`,
+built from the CC0 simple-icons SVG with `bun run build:font`) because both
+the menu and the bar draw icons as text. The bar loads it straight from the
+plugin folder; the menu needs the copy `setup` installs, which the shell picks
+up on its next restart.
+
+| Path | Purpose |
+| --- | --- |
+| `~/.config/omarchy/plugins/omadoist/` | the plugin (this repository) |
+| `~/.config/omarchy/shell.json` | one `{"id":"omadoist"}` entry in the bar layout |
+| `~/.config/omarchy/extensions/omarchy-menu.jsonc` | the generated block only |
+| `~/.config/omadoist/` | token (mode 600) + config |
+| `~/.cache/omadoist/` | `tasks.json`, `bar.json` |
+| `~/.config/systemd/user/omadoist-sync.{service,timer}` | background sync |
+| `~/.local/share/fonts/omadoist-icons.ttf` | the Todoist mark |
+| `~/.local/bin/omadoist` | launcher, for the terminal |
+
+`TODOIST_API_TOKEN` in the environment overrides the token file. Plugins run
+unsandboxed inside `omarchy-shell`; read the code before enabling it.
+
+## Development
+
+```bash
+bun install                 # only for tests, tsc and the font build
+bun test                    # CLI logic, sync diff, filter diagnosis, plugin/Model.js
+bunx tsc --noEmit
+```
+
+`Panel.qml` is the bar widget and its popup; `Model.js` is the Qt-free logic it
+leans on. `omarchy plugin validate .` refuses a tree with `node_modules` in it
+(symlinks), so validate a clean copy — `./install.sh` does — or a fresh clone.
+Note that the shell hot-reloads a changed plugin but may keep serving the
+previously compiled QML; after QML edits run `omarchy restart shell` and check
+`qs log --pid $(pgrep -f 'quickshell -n -p') -t 200` for errors.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The Todoist name and logo are trademarks of
+Doist; this project is not affiliated with or endorsed by Doist.

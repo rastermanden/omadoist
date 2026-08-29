@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "omadoist",
+  "name": "Omadoist",
+  "version": "0.3.0",
+  "author": "Martin Bjærge Jensen",
+  "license": "MIT",
+  "homepage": "https://github.com/rastermanden/omadoist",
+  "description": "Todoist in the Omarchy bar and menu: the open-task count next to the Todoist mark, a panel that lists your tasks and ticks them off in place, inline add and filter, and notifications only for changes made elsewhere.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Todoist",
+    "description": "Open-task count in the bar; click for the list. Enter completes, n adds, r refreshes, o opens Todoist.",
+    "category": "Productivity",
+    "aliases": ["todoist", "todo", "tasks"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "showCount": true,
+      "hideWhenEmpty": false,
+      "icon": "",
+      "iconFont": "Omadoist Icons",
+      "command": ""
+    },
+    "schema": [
+      { "key": "showCount", "type": "boolean", "label": "Show open-task count", "defaultValue": true },
+      { "key": "hideWhenEmpty", "type": "boolean", "label": "Hide when there are no open tasks", "defaultValue": false },
+      { "key": "icon", "type": "string", "label": "Bar glyph", "defaultValue": "", "description": "The Todoist mark from the bundled font. Any Nerd Font glyph works once the font below is cleared." },
+      { "key": "iconFont", "type": "string", "label": "Glyph font family", "defaultValue": "Omadoist Icons", "description": "Leave empty to draw the glyph with the bar font." },
+      { "key": "command", "type": "path", "label": "omadoist launcher", "defaultValue": "", "description": "Defaults to bin/omadoist inside the plugin folder." }
+    ]
+  }
+}

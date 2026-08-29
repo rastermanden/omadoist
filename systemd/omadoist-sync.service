@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh the Todoist rows in the Omarchy menu
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omadoist sync

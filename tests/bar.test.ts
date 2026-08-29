@@ -1,0 +1,81 @@
+import { expect, test } from "bun:test"
+import { buildBarView, humanPriority, toBarTask } from "../src/bar"
+import type { Cache } from "../src/cache"
+import { DEFAULT_CONFIG } from "../src/config"
+import type { Task } from "../src/todoist"
+
+const now = new Date(2026, 7, 29, 12, 0, 0) // 29 Aug 2026, local time
+const config = { ...DEFAULT_CONFIG }
+
+function task(id: string, content: string, extra: Partial<Task> = {}): Task {
+  return { id, content, project_id: "p1", priority: 1, ...extra }
+}
+
+function cache(tasks: Task[]): Cache {
+  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]] }
+}
+
+test("rows come out sorted the way the menu sorts them, with display strings ready", () => {
+  const view = buildBarView(
+    cache([
+      task("later", "Later", { due: { date: "2026-10-05" } }),
+      task("today", "Today", { due: { date: "2026-08-29" } }),
+      task("overdue", "Overdue", { due: { date: "2026-08-27" }, priority: 4 }),
+      task("undated", "Undated"),
+    ]),
+    config,
+    true,
+    now,
+  )
+
+  expect(view.connected).toBe(true)
+  expect(view.tasks.map((row) => row.id)).toEqual(["overdue", "today", "later", "undated"])
+  expect(view.tasks[0]).toMatchObject({ due: "Overdue · 27 Aug", overdue: true, today: false, project: "Work", priority: 1 })
+  expect(view.tasks[1]).toMatchObject({ due: "Today", overdue: false, today: true, priority: 4 })
+  expect(view.tasks[3]?.due).toBe("")
+  expect(view.count).toBe(4)
+  expect(view.overdue).toBe(1)
+  expect(view.today).toBe(1)
+  expect(view.filter).toBe("")
+})
+
+test("the filter the rows came from is part of the view", () => {
+  const view = buildBarView(cache([]), { ...config, filter: " today | overdue " }, true, now)
+  expect(view.filter).toBe("today | overdue")
+  expect(view.filterError).toBeNull()
+  const refused = buildBarView(cache([]), config, true, now, { query: "todya", message: "nope", suggestion: "today" })
+  expect(refused.filterError).toEqual({ query: "todya", message: "nope", suggestion: "today" })
+})
+
+test("a timed task earlier today is overdue, not today", () => {
+  const row = toBarTask(task("a", "Standup", { due: { date: "2026-08-29", datetime: "2026-08-29T09:00:00", is_recurring: true } }), new Map(), now)
+  expect(row.overdue).toBe(true)
+  expect(row.today).toBe(false)
+  expect(row.recurring).toBe(true)
+  expect(row.due).toBe("Today 09:00 ↻")
+})
+
+test("the list is capped at the configured limit but the count is not", () => {
+  const tasks = Array.from({ length: 7 }, (_, i) => task(`t${i}`, `Task ${i}`))
+  const view = buildBarView(cache(tasks), { ...config, limit: 3 }, true, now)
+  expect(view.tasks).toHaveLength(3)
+  expect(view.count).toBe(7)
+})
+
+test("without a token the view is empty and says so", () => {
+  const view = buildBarView(cache([task("1", "Buy milk")]), config, false, now)
+  expect(view).toMatchObject({ connected: false, count: 0, tasks: [], fetchedAt: "" })
+  expect(view.generatedAt).toBe(now.toISOString())
+})
+
+test("priority is flipped into the number people see, and the url falls back to the task page", () => {
+  expect(humanPriority(task("a", "x", { priority: 4 }))).toBe(1)
+  expect(humanPriority(task("a", "x", { priority: 1 }))).toBe(4)
+  expect(humanPriority(task("a", "x", {}))).toBe(4)
+  expect(toBarTask(task("6hPM", "x"), new Map(), now).url).toBe("https://app.todoist.com/app/task/6hPM")
+  expect(toBarTask(task("6hPM", "x", { url: "https://todoist.com/showTask?id=1" }), new Map(), now).url).toBe("https://todoist.com/showTask?id=1")
+})
+
+test("whitespace in titles is collapsed so a row stays on one line", () => {
+  expect(toBarTask(task("a", "  Call\n  mom \t now "), new Map(), now).title).toBe("Call mom now")
+})
