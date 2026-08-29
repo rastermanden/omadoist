@@ -5,7 +5,7 @@ var TODOIST_TODAY = "https://app.todoist.com/app/today"
 var TODOIST_TASK = "https://app.todoist.com/app/task/"
 
 function emptyView() {
-  return { version: 2, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
+  return { version: 2, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, rolledForward: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
 }
 
 function count(value, fallback) {
@@ -59,6 +59,15 @@ function parseFilterError(raw) {
 // ~/.cache/omadoist/bar.json as written by `omadoist sync`. Anything
 // malformed degrades to the empty, disconnected view rather than throwing
 // inside the shell.
+// A completion that came back: Todoist rolls a recurring task forward instead
+// of closing it, and the CLI names the survivor here.
+function parseRolledForward(raw) {
+  if (!raw || typeof raw !== "object") return null
+  var id = String(raw.id === undefined || raw.id === null ? "" : raw.id)
+  if (id === "") return null
+  return { id: id, title: String(raw.title || ""), due: String(raw.due || "") }
+}
+
 function parseView(raw) {
   var view = emptyView()
   var data
@@ -78,6 +87,7 @@ function parseView(raw) {
   view.connected = data.connected === true
   view.filter = typeof data.filter === "string" ? data.filter.trim() : ""
   view.filterError = parseFilterError(data.filterError)
+  view.rolledForward = parseRolledForward(data.rolledForward)
   view.projects = parseProjects(data.projects)
   view.count = count(data.count, view.tasks.length)
   view.overdue = count(data.overdue, view.tasks.filter(function(task) { return task.overdue }).length)
@@ -219,6 +229,29 @@ function reconcilePending(pending, tasks) {
   return kept === Object.keys(pending || {}).length ? pending : next
 }
 
+/**
+ * The roll-forward is worth confirming only while it is news. bar.json keeps
+ * the field until the next write, so a shell restarted an hour later — or the
+ * slow poll re-reading the same file — must not tick a row all over again.
+ */
+function justRolledForward(view, now, withinMs) {
+  var rolled = view && view.rolledForward
+  if (!rolled) return null
+  var at = Date.parse((view && view.generatedAt) || "")
+  if (isNaN(at)) return null
+  var age = now.getTime() - at
+  return age >= 0 && age <= (withinMs || 30000) ? rolled : null
+}
+
+function clearPending(pending, id) {
+  var next = {}
+  var key = String(id)
+  for (var name in pending) {
+    if (name !== key) next[name] = pending[name]
+  }
+  return next
+}
+
 function todayUrl() {
   return TODOIST_TODAY
 }
@@ -241,6 +274,8 @@ if (typeof module !== "undefined") {
     taskAt: taskAt,
     withPending: withPending,
     reconcilePending: reconcilePending,
+    justRolledForward: justRolledForward,
+    clearPending: clearPending,
     todayUrl: todayUrl
   }
 }

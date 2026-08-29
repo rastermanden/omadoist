@@ -60,15 +60,15 @@ async function writeMenu(cache: Cache, config: Config, authenticated: boolean): 
 // truncated document fails to parse and the panel falls back to "not
 // connected" — hence the atomic rename. The directory is private for the same
 // reason the cache is: these rows are the user's task titles.
-async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null): Promise<void> {
+async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null, completedId = ""): Promise<void> {
   await ensureDir(CACHE_DIR)
-  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)), 0o600)
+  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError, completedId)), 0o600)
 }
 
 // Menu block and bar view always change together.
-async function publish(cache: Cache, config: Config, authenticated: boolean): Promise<void> {
+async function publish(cache: Cache, config: Config, authenticated: boolean, completedId = ""): Promise<void> {
   await writeMenu(cache, config, authenticated)
-  await writeBar(cache, config, authenticated)
+  await writeBar(cache, config, authenticated, null, completedId)
 }
 
 // ---------------------------------------------------------------- commands
@@ -98,9 +98,15 @@ type SyncOptions = {
   silentIds?: string[]
   /** False after a filter change, when the whole list legitimately turns over. */
   notifyChanges?: boolean
+  /**
+   * The task `done` just closed. Todoist rolls a recurring task forward rather
+   * than closing it, so a task still listed after this sync is a completion
+   * that worked — not one that failed.
+   */
+  completedId?: string
 }
 
-async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }: SyncOptions = {}): Promise<number> {
+async function cmdSync(args: string[], { silentIds = [], notifyChanges = true, completedId = "" }: SyncOptions = {}): Promise<number> {
   const config = await loadConfig()
   const token = await loadToken()
   const previous = await loadCache()
@@ -136,7 +142,16 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
     inboxProjectId: inboxId(choices),
   }
   await saveCache(cache)
-  await publish(cache, config, true)
+
+  // A completed task that is still here came back on purpose: say where it
+  // went, so the row reappearing does not read as a completion that failed.
+  const rolledForward = completedId ? tasks.find((task) => String(task.id) === completedId) : undefined
+  await publish(cache, config, true, rolledForward ? completedId : "")
+  if (rolledForward) {
+    const due = formatDue(rolledForward)
+    console.log(`${rolledForward.content} → ${due || "no due date"} (recurring)`)
+    notify(`${rolledForward.content} → ${due}`, "Recurring task moved to its next occurrence")
+  }
 
   console.log(`Synced ${tasks.length} task${tasks.length === 1 ? "" : "s"} into ${MENU_FILE}`)
   if (args.includes("--open")) await run(["omarchy-menu", "summon", "todoist"])
@@ -163,7 +178,7 @@ async function cmdDone(args: string[]): Promise<number> {
   await saveCache(pruned)
   await publish(pruned, config, true)
 
-  return cmdSync([], { silentIds: [id] })
+  return cmdSync([], { silentIds: [id], completedId: id })
 }
 
 /**
