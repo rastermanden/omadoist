@@ -43,6 +43,13 @@ drift; bump both in the release commit.
   instead — `omadoist reopen <id>` still obeys.
   ([#9](https://github.com/rastermanden/omadoist/issues/9))
 
+- A task's description and labels, under the list for the row the cursor is on.
+  Both were fetched on every sync and thrown away; neither belongs on the row
+  itself, so the list stays as quiet as it was and the detail area appears only
+  when the cursor is on a task that has something to add. `showTaskDetails` in
+  `config.json` turns it off, which keeps the text out of `bar.json` entirely.
+  ([#11](https://github.com/rastermanden/omadoist/issues/11))
+
 ### Changed
 
 - The CLI is one callable function — `main(argv, effects)` behind an

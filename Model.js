@@ -13,6 +13,17 @@ function count(value, fallback) {
   return isNaN(n) || n < 0 ? fallback : n
 }
 
+// Label names as `omadoist sync` wrote them, without Todoist's leading `@`.
+function normalizeLabels(raw) {
+  if (!Array.isArray(raw)) return []
+  var out = []
+  for (var i = 0; i < raw.length; i++) {
+    var name = String(raw[i] === undefined || raw[i] === null ? "" : raw[i]).replace(/\s+/g, " ").trim()
+    if (name !== "") out.push(name)
+  }
+  return out
+}
+
 function normalizeTask(raw) {
   var id = String(raw.id)
   var priority = parseInt(String(raw.priority), 10)
@@ -26,7 +37,11 @@ function normalizeTask(raw) {
     recurring: raw.recurring === true,
     project: String(raw.project || ""),
     priority: priority,
-    url: typeof raw.url === "string" && raw.url !== "" ? raw.url : TODOIST_TASK + encodeURIComponent(id)
+    url: typeof raw.url === "string" && raw.url !== "" ? raw.url : TODOIST_TASK + encodeURIComponent(id),
+    // Only carried when showTaskDetails is on; the CLI writes them empty
+    // otherwise, so nothing here has to know about the setting.
+    description: String(raw.description || "").trim(),
+    labels: normalizeLabels(raw.labels)
   }
 }
 
@@ -239,6 +254,24 @@ function filterLabel(view) {
   return view && view.filter ? view.filter : "All active tasks"
 }
 
+/**
+ * Has this task anything to show beyond its row? The detail area under the
+ * list is worth its space only then — most tasks are a title and a date, and
+ * the list is deliberately quiet.
+ */
+function hasDetail(task) {
+  if (!task) return false
+  return String(task.description || "") !== "" || (task.labels || []).length > 0
+}
+
+/** Labels as Todoist writes them, for the one line under the description. */
+function labelLine(task) {
+  var labels = (task && task.labels) || []
+  var out = []
+  for (var i = 0; i < labels.length; i++) out.push("@" + labels[i])
+  return out.join("  ")
+}
+
 function subtitle(task) {
   if (!task) return ""
   return [task.due, task.project].filter(function(part) { return !!part }).join(" · ")
@@ -336,6 +369,8 @@ if (typeof module !== "undefined") {
     syncedLabel: syncedLabel,
     syncWarning: syncWarning,
     subtitle: subtitle,
+    hasDetail: hasDetail,
+    labelLine: labelLine,
     filterLabel: filterLabel,
     defaultProjectId: defaultProjectId,
     projectOptions: projectOptions,

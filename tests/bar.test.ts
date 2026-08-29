@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { buildBarView, humanPriority, toBarTask } from "../src/bar"
+import { buildBarView, humanPriority, taskLabels, toBarTask, trimDescription } from "../src/bar"
 import type { Cache } from "../src/cache"
 import { DEFAULT_CONFIG } from "../src/config"
 import type { Task } from "../src/todoist"
@@ -126,4 +126,54 @@ test("a rolled-forward row is named even when it falls outside the shown limit",
   const view = buildBarView(cache, { ...DEFAULT_CONFIG, limit: 1 }, true, new Date("2026-08-29T10:00:00.000Z"), null, "t4")
   expect(view.tasks).toHaveLength(1)
   expect(view.rolledForward?.id).toBe("t4")
+})
+
+// ------------------------------------------- a task's own notes and labels
+
+test("description and labels ride along, trimmed, for the panel's detail area", () => {
+  const view = buildBarView(
+    cache([
+      task("t1", "Ring VVS", {
+        description: "  Spørg om de kan tage\r\n\n\n\ndet hele på én gang.  ",
+        labels: ["  hjem ", "", "gør det selv"],
+      }),
+    ]),
+    config,
+    true,
+    now,
+  )
+  // CRLF folded, the gap between paragraphs kept but not the blank run.
+  expect(view.tasks[0]!.description).toBe("Spørg om de kan tage\n\ndet hele på én gang.")
+  expect(view.tasks[0]!.labels).toEqual(["hjem", "gør det selv"])
+})
+
+test("a task with nothing to add carries nothing", () => {
+  const view = buildBarView(cache([task("t1", "Ring VVS")]), config, true, now)
+  expect(view.tasks[0]!.description).toBe("")
+  expect(view.tasks[0]!.labels).toEqual([])
+})
+
+test("a description longer than the panel would show is cut, not carried whole", () => {
+  const long = trimDescription("x".repeat(900))
+  expect(long).toHaveLength(501)
+  expect(long.endsWith("…")).toBe(true)
+  expect(trimDescription("x".repeat(500))).toHaveLength(500)
+})
+
+test("labels that are not strings, or not a list, are dropped rather than shown", () => {
+  expect(taskLabels({ id: "t", content: "c" })).toEqual([])
+  expect(taskLabels({ id: "t", content: "c", labels: undefined })).toEqual([])
+  expect(taskLabels({ id: "t", content: "c", labels: ["  ", "ok"] })).toEqual(["ok"])
+})
+
+test("showTaskDetails off keeps the notes out of bar.json entirely", () => {
+  const quiet = { ...DEFAULT_CONFIG, showTaskDetails: false }
+  const view = buildBarView(
+    cache([task("t1", "Ring VVS", { description: "Something", labels: ["hjem"] })]),
+    quiet,
+    true,
+    now,
+  )
+  expect(view.tasks[0]!.description).toBe("")
+  expect(view.tasks[0]!.labels).toEqual([])
 })

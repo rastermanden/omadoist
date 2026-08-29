@@ -22,6 +22,32 @@ export type BarTask = {
   /** Human priority: 1 is Todoist's p1 (most urgent), 4 is none. */
   priority: 1 | 2 | 3 | 4
   url: string
+  /**
+   * The task's own notes, trimmed and capped. Empty when it has none, and
+   * empty for every row when `showTaskDetails` is off: bar.json is re-read on
+   * every panel open, so what the panel will not draw is not written.
+   */
+  description: string
+  /** Label names, without Todoist's leading `@`. */
+  labels: string[]
+}
+
+// A description is free text and can run to pages. The panel shows a few
+// lines of it, so the rest is weight in a file rewritten every five minutes.
+const MAX_DESCRIPTION = 500
+
+export function trimDescription(raw: string): string {
+  const text = raw
+    .replace(/\r\n?/g, "\n")
+    // Keep paragraphs, drop the gaps someone left between them.
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  return text.length > MAX_DESCRIPTION ? text.slice(0, MAX_DESCRIPTION).trimEnd() + "…" : text
+}
+
+export function taskLabels(task: Task): string[] {
+  if (!Array.isArray(task.labels)) return []
+  return task.labels.map((label) => String(label ?? "").replace(/\s+/g, " ").trim()).filter(Boolean)
 }
 
 /**
@@ -88,7 +114,7 @@ function dueDate(task: Task): string {
   return ""
 }
 
-export function toBarTask(task: Task, projects: Map<string, string>, now = new Date()): BarTask {
+export function toBarTask(task: Task, projects: Map<string, string>, now = new Date(), details = true): BarTask {
   const id = String(task.id)
   const overdue = isOverdue(task, now)
   return {
@@ -101,6 +127,8 @@ export function toBarTask(task: Task, projects: Map<string, string>, now = new D
     project: (task.project_id && projects.get(String(task.project_id))) || "",
     priority: humanPriority(task),
     url: task.url || `https://app.todoist.com/app/task/${encodeURIComponent(id)}`,
+    description: details ? trimDescription(String(task.description ?? "")) : "",
+    labels: details ? taskLabels(task) : [],
   }
 }
 
@@ -138,7 +166,7 @@ export function buildBarView(
   view.projects = choicesFromPairs(cache.projects, cache.inboxProjectId)
 
   const projects = new Map(cache.projects)
-  const rows = sortTasks(cache.tasks).map((task) => toBarTask(task, projects, now))
+  const rows = sortTasks(cache.tasks).map((task) => toBarTask(task, projects, now, config.showTaskDetails))
   view.count = rows.length
   view.overdue = rows.filter((row) => row.overdue).length
   view.today = rows.filter((row) => row.today).length
