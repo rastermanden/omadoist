@@ -15,14 +15,42 @@ import { closeTask, createTask, fetchLabels, fetchProjects, fetchTasks, TodoistE
 
 const APP = "Todoist"
 
-function notify(title: string, body = "", urgency: "low" | "normal" | "critical" = "low") {
-  Bun.spawn(["notify-send", "-a", APP, "-u", urgency, title, body], {
-    stdio: ["ignore", "ignore", "ignore"],
-  }).unref()
+// ------------------------------------------------------------------- effects
+
+export type Urgency = "low" | "normal" | "critical"
+
+/**
+ * Everything a command does outside its own process. Gathered here so `main`
+ * can be handed stand-ins: nothing else in the CLI spawns or notifies.
+ */
+export type Effects = {
+  /** Desktop notification, fire-and-forget. */
+  notify(title: string, body?: string, urgency?: Urgency): void
+  /**
+   * Run a command and wait for it, keeping what it printed. `code` is 127 when
+   * the binary is not there at all — the shell's own wording for it, and the
+   * signal callers use to fall back rather than treat it as a refusal.
+   */
+  run(command: string[]): Promise<{ code: number; stdout: string }>
 }
 
-async function run(command: string[]): Promise<void> {
-  await Bun.spawn(command, { stdio: ["ignore", "ignore", "ignore"] }).exited
+export const systemEffects: Effects = {
+  notify(title, body = "", urgency = "low") {
+    Bun.spawn(["notify-send", "-a", APP, "-u", urgency, title, body], {
+      stdio: ["ignore", "ignore", "ignore"],
+    }).unref()
+  },
+
+  async run(command) {
+    let child
+    try {
+      child = Bun.spawn(command, { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+    } catch {
+      return { code: 127, stdout: "" }
+    }
+    const stdout = await new Response(child.stdout).text()
+    return { code: await child.exited, stdout }
+  },
 }
 
 async function requireToken(): Promise<string> {
@@ -63,7 +91,7 @@ async function publish(cache: Cache, config: Config, authenticated: boolean): Pr
 
 // ---------------------------------------------------------------- commands
 
-async function cmdAuth(args: string[]): Promise<number> {
+async function cmdAuth(args: string[], fx: Effects): Promise<number> {
   let token = args[0]?.trim()
   if (!token) {
     // One line, so a paste into an interactive terminal is enough and a piped
@@ -80,7 +108,7 @@ async function cmdAuth(args: string[]): Promise<number> {
   await verifyToken(token)
   await saveToken(token)
   console.log(`Token stored in ${TOKEN_FILE} (mode 600).`)
-  return cmdSync([])
+  return cmdSync([], fx)
 }
 
 type SyncOptions = {
@@ -90,7 +118,7 @@ type SyncOptions = {
   notifyChanges?: boolean
 }
 
-async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }: SyncOptions = {}): Promise<number> {
+async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChanges = true }: SyncOptions = {}): Promise<number> {
   const config = await loadConfig()
   const token = await loadToken()
   const previous = await loadCache()
@@ -100,7 +128,7 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
     // Not an error, just unconfigured: the menu now carries a "Connect
     // Todoist…" row, and the sync timer should not keep failing in the journal.
     console.error("omadoist: not connected — run `omadoist auth`")
-    if (args.includes("--open")) await run(["omarchy-menu", "summon", "todoist"])
+    if (args.includes("--open")) await fx.run(["omarchy-menu", "summon", "todoist"])
     return 0
   }
 
@@ -116,7 +144,7 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
   // Not before the first sync, when everything would look new.
   if (notifyChanges && config.notifyRemoteChanges && previous.fetchedAt) {
     const summary = describeChanges(diffTasks(previous.tasks, tasks, silentIds))
-    if (summary) notify(summary.title, summary.body)
+    if (summary) fx.notify(summary.title, summary.body)
   }
 
   const cache: Cache = {
@@ -129,11 +157,11 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
   await publish(cache, config, true)
 
   console.log(`Synced ${tasks.length} task${tasks.length === 1 ? "" : "s"} into ${MENU_FILE}`)
-  if (args.includes("--open")) await run(["omarchy-menu", "summon", "todoist"])
+  if (args.includes("--open")) await fx.run(["omarchy-menu", "summon", "todoist"])
   return 0
 }
 
-async function cmdDone(args: string[]): Promise<number> {
+async function cmdDone(args: string[], fx: Effects): Promise<number> {
   const id = args[0]?.trim()
   if (!id) {
     console.error("usage: omadoist done <task-id>")
@@ -153,7 +181,7 @@ async function cmdDone(args: string[]): Promise<number> {
   await saveCache(pruned)
   await publish(pruned, config, true)
 
-  return cmdSync([], { silentIds: [id] })
+  return cmdSync([], fx, { silentIds: [id] })
 }
 
 /**
@@ -162,26 +190,20 @@ async function cmdDone(args: string[]): Promise<number> {
  * worth a question, and a shell without the picker gets the Inbox rather than
  * a failed add.
  */
-async function askProject(choices: ProjectChoice[]): Promise<{ cancelled: boolean; choice: ProjectChoice | null }> {
+async function askProject(choices: ProjectChoice[], fx: Effects): Promise<{ cancelled: boolean; choice: ProjectChoice | null }> {
   if (choices.length < 2) return { cancelled: false, choice: choices[0] ?? null }
 
-  let picker
-  try {
-    picker = Bun.spawn(["omarchy-menu-select", "Project", ...choices.map((choice) => choice.name), "--", "--width", "460"], {
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-  } catch {
-    return { cancelled: false, choice: null }
-  }
+  const picker = await fx.run(["omarchy-menu-select", "Project", ...choices.map((choice) => choice.name), "--", "--width", "460"])
+  // No picker on this machine is not a refusal: fall through to the Inbox.
+  if (picker.code === 127) return { cancelled: false, choice: null }
 
-  const answer = (await new Response(picker.stdout).text()).trim()
-  if ((await picker.exited) !== 0 || !answer) return { cancelled: true, choice: null }
+  const answer = picker.stdout.trim()
+  if (picker.code !== 0 || !answer) return { cancelled: true, choice: null }
   // The menu hands back "<label>\t<subtext>" when a row carries one.
   return { cancelled: false, choice: resolveProject(choices, answer.split("\t")[0] ?? answer) }
 }
 
-async function cmdAdd(args: string[]): Promise<number> {
+async function cmdAdd(args: string[], fx: Effects): Promise<number> {
   const { project: wanted, words } = parseAddArgs(args)
   let content = words.join(" ").trim()
 
@@ -208,13 +230,13 @@ async function cmdAdd(args: string[]): Promise<number> {
   if (!content) {
     // No text on the command line means the menu triggered it: ask through the
     // same Quickshell menu the user is already looking at.
-    const prompt = Bun.spawn(["omarchy-menu-input", "New task"], { stdout: "pipe", stderr: "ignore" })
-    content = (await new Response(prompt.stdout).text()).trim()
-    if ((await prompt.exited) !== 0 || !content) return 0 // cancelled
+    const prompt = await fx.run(["omarchy-menu-input", "New task"])
+    content = prompt.stdout.trim()
+    if (prompt.code !== 0 || !content) return 0 // cancelled
 
     if (!target) {
       if (choices.length === 0) choices = projectChoices(await fetchProjects(token))
-      const asked = await askProject(choices)
+      const asked = await askProject(choices, fx)
       if (asked.cancelled) return 0
       target = asked.choice
     }
@@ -222,17 +244,17 @@ async function cmdAdd(args: string[]): Promise<number> {
 
   const task = await createTask(token, content, target?.id)
   console.log(`Added “${content}”${target ? ` to ${target.name}` : ""}`)
-  return cmdSync([], { silentIds: [String(task.id)] })
+  return cmdSync([], fx, { silentIds: [String(task.id)] })
 }
 
 // "all" and "*" mean no filter: the menu prompt cannot hand back an empty
 // string, and both read naturally on the command line too.
-function normalizeFilter(query: string): string {
+export function normalizeFilter(query: string): string {
   const text = query.trim()
   return text === "" || text === "*" || text.toLowerCase() === "all" ? "" : text
 }
 
-async function cmdFilter(args: string[]): Promise<number> {
+async function cmdFilter(args: string[], fx: Effects): Promise<number> {
   const config = await loadConfig()
 
   if (args.length === 0) {
@@ -247,10 +269,9 @@ async function cmdFilter(args: string[]): Promise<number> {
     // From the menu or the panel: ask through the Omarchy menu, with the
     // current filter in the prompt since the input cannot be prefilled.
     const prompt = `Todoist filter — now: ${config.filter || "all"}  (all = no filter)`
-    const input = Bun.spawn(["omarchy-menu-input", prompt, "--width", "560"], { stdout: "pipe", stderr: "ignore" })
-    const text = (await new Response(input.stdout).text()).trim()
-    if ((await input.exited) !== 0) return 0 // cancelled
-    query = normalizeFilter(text)
+    const input = await fx.run(["omarchy-menu-input", prompt, "--width", "560"])
+    if (input.code !== 0) return 0 // cancelled
+    query = normalizeFilter(input.stdout.trim())
   } else {
     query = normalizeFilter(args.join(" "))
   }
@@ -280,7 +301,7 @@ async function cmdFilter(args: string[]): Promise<number> {
     await writeBar(cache, config, true, { query, message, suggestion: diagnosis.suggestion })
     console.error(`omadoist: ${message}`)
     if (diagnosis.suggestion) console.error(`  try: omadoist filter ${shellQuote(diagnosis.suggestion)}`)
-    notify("Todoist filter", message, "normal")
+    fx.notify("Todoist filter", message, "normal")
     return 1
   }
 
@@ -302,9 +323,9 @@ async function cmdFilter(args: string[]): Promise<number> {
   }
   console.log(query ? `Filter set: ${query}${hint}` : "Filter cleared: all active tasks")
   if (suggestion) console.log(`  try: omadoist filter ${shellQuote(suggestion)}`)
-  notify("Todoist filter", (query || "All active tasks") + hint)
+  fx.notify("Todoist filter", (query || "All active tasks") + hint)
   // Everything may change now; that is the point, not remote news.
-  return cmdSync([], { notifyChanges: false })
+  return cmdSync([], fx, { notifyChanges: false })
 }
 
 async function cmdList(): Promise<number> {
@@ -396,36 +417,49 @@ Usage:
   return 0
 }
 
-const [command = "help", ...rest] = process.argv.slice(2)
+/**
+ * The whole CLI as one call: an argv in, an exit code out, and every side
+ * effect outside this process reachable through `fx`. `bin/omadoist` is the
+ * only caller that turns the code into an exit.
+ */
+export async function main(argv: string[], fx: Effects = systemEffects): Promise<number> {
+  const [command = "help", ...rest] = argv
 
-try {
-  const handlers: Record<string, () => Promise<number>> = {
-    auth: () => cmdAuth(rest),
-    sync: () => cmdSync(rest),
-    done: () => cmdDone(rest),
-    add: () => cmdAdd(rest),
-    filter: () => cmdFilter(rest),
-    list: () => cmdList(),
-    menu: () => cmdMenu(),
-    status: () => cmdStatus(),
-    setup: () => cmdSetup(),
-    uninstall: () => cmdUninstall(rest),
-    "unlink-menu": () => cmdUninstallMenu(),
-  }
-
-  const handler = handlers[command]
-  if (!handler) {
-    if (command !== "help" && command !== "--help" && command !== "-h") {
-      console.error(`omadoist: unknown command '${command}'\n`)
-      usage()
-      process.exit(2)
+  try {
+    const handlers: Record<string, () => Promise<number>> = {
+      auth: () => cmdAuth(rest, fx),
+      sync: () => cmdSync(rest, fx),
+      done: () => cmdDone(rest, fx),
+      add: () => cmdAdd(rest, fx),
+      filter: () => cmdFilter(rest, fx),
+      list: () => cmdList(),
+      menu: () => cmdMenu(),
+      status: () => cmdStatus(),
+      setup: () => cmdSetup(),
+      uninstall: () => cmdUninstall(rest),
+      "unlink-menu": () => cmdUninstallMenu(),
     }
-    process.exit(usage())
+
+    const handler = handlers[command]
+    if (!handler) {
+      if (command !== "help" && command !== "--help" && command !== "-h") {
+        console.error(`omadoist: unknown command '${command}'\n`)
+        usage()
+        return 2
+      }
+      return usage()
+    }
+    return await handler()
+  } catch (err) {
+    const message = err instanceof TodoistError ? err.message : String(err)
+    console.error(`omadoist: ${message}`)
+    // A sync runs on a timer every five minutes; the other three are things
+    // the user just asked for, and a silent failure would be a lie.
+    if (["done", "add", "filter"].includes(command)) fx.notify("Todoist failed", message, "critical")
+    return 1
   }
-  process.exit(await handler())
-} catch (err) {
-  const message = err instanceof TodoistError ? err.message : String(err)
-  console.error(`omadoist: ${message}`)
-  if (["done", "add", "filter"].includes(command)) notify("Todoist failed", message, "critical")
-  process.exit(1)
+}
+
+if (import.meta.main) {
+  process.exit(await main(process.argv.slice(2)))
 }
