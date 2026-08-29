@@ -6,9 +6,11 @@ import { buildBarView } from "./bar"
 import { EMPTY_CACHE, loadCache, saveCache, type Cache } from "./cache"
 import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
-import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
+import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, CACHE_DIR, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
+import { ensureDir, writeAtomic } from "./files"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
+import { spawnOptional } from "./proc"
 import { hasProjectToken, withProject } from "./quickadd"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
@@ -31,25 +33,26 @@ export type Effects = {
   /**
    * Run a command and wait for it, keeping what it printed. `code` is 127 when
    * the binary is not there at all — the shell's own wording for it, and the
-   * signal callers use to fall back rather than treat it as a refusal.
+   * signal callers use to tell "this machine has no menu" from "the user said
+   * no".
    */
   run(command: string[]): Promise<{ code: number; stdout: string }>
 }
 
+// notify-send and the Omarchy menu binaries are conveniences: a machine
+// without them still syncs. spawnOptional keeps a missing binary from throwing
+// past the work that matters — the notify below used to abort cmdSync before
+// it ever reached saveCache, freezing the widget on stale data.
 export const systemEffects: Effects = {
   notify(title, body = "", urgency = "low") {
-    Bun.spawn(["notify-send", "-a", APP, "-u", urgency, title, body], {
+    spawnOptional(["notify-send", "-a", APP, "-u", urgency, title, body], {
       stdio: ["ignore", "ignore", "ignore"],
-    }).unref()
+    })?.unref()
   },
 
   async run(command) {
-    let child
-    try {
-      child = Bun.spawn(command, { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
-    } catch {
-      return { code: 127, stdout: "" }
-    }
+    const child = spawnOptional(command, { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+    if (!child) return { code: 127, stdout: "" }
     const stdout = await new Response(child.stdout).text()
     return { code: await child.exited, stdout }
   },
@@ -80,15 +83,19 @@ async function writeMenu(cache: Cache, config: Config, authenticated: boolean): 
 
 // The bar widget (plugin/Panel.qml) watches this file instead of re-deriving
 // sort order and due labels in QML: the CLI is the one place that knows them.
-async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null): Promise<void> {
-  await mkdir(dirname(BAR_FILE), { recursive: true })
-  await Bun.write(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)))
+// It watches with watchChanges: true, so a read must never land mid-write — a
+// truncated document fails to parse and the panel falls back to "not
+// connected" — hence the atomic rename. The directory is private for the same
+// reason the cache is: these rows are the user's task titles.
+async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null, completedId = ""): Promise<void> {
+  await ensureDir(CACHE_DIR)
+  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError, completedId)), 0o600)
 }
 
 // Menu block and bar view always change together.
-async function publish(cache: Cache, config: Config, authenticated: boolean): Promise<void> {
+async function publish(cache: Cache, config: Config, authenticated: boolean, completedId = ""): Promise<void> {
   await writeMenu(cache, config, authenticated)
-  await writeBar(cache, config, authenticated)
+  await writeBar(cache, config, authenticated, null, completedId)
 }
 
 // ---------------------------------------------------------------- commands
@@ -118,9 +125,15 @@ type SyncOptions = {
   silentIds?: string[]
   /** False after a filter change, when the whole list legitimately turns over. */
   notifyChanges?: boolean
+  /**
+   * The task `done` just closed. Todoist rolls a recurring task forward rather
+   * than closing it, so a task still listed after this sync is a completion
+   * that worked — not one that failed.
+   */
+  completedId?: string
 }
 
-async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChanges = true }: SyncOptions = {}): Promise<number> {
+async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChanges = true, completedId = "" }: SyncOptions = {}): Promise<number> {
   const config = await loadConfig()
   const token = await loadToken()
   const previous = await loadCache()
@@ -175,7 +188,16 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
     lastCompleted: previous.lastCompleted,
   }
   await saveCache(cache)
-  await publish(cache, config, true)
+
+  // A completed task that is still here came back on purpose: say where it
+  // went, so the row reappearing does not read as a completion that failed.
+  const rolledForward = completedId ? tasks.find((task) => String(task.id) === completedId) : undefined
+  await publish(cache, config, true, rolledForward ? completedId : "")
+  if (rolledForward) {
+    const due = formatDue(rolledForward)
+    console.log(`${rolledForward.content} → ${due || "no due date"} (recurring)`)
+    fx.notify(`${rolledForward.content} → ${due}`, "Recurring task moved to its next occurrence")
+  }
 
   console.log(`Synced ${tasks.length} task${tasks.length === 1 ? "" : "s"} into ${MENU_FILE}`)
   if (args.includes("--open")) await fx.run(["omarchy-menu", "summon", "todoist"])
@@ -214,7 +236,7 @@ async function cmdDone(args: string[], fx: Effects): Promise<number> {
   await saveCache(pruned)
   await publish(pruned, config, true)
 
-  return cmdSync([], fx, { silentIds: [id] })
+  return cmdSync([], fx, { silentIds: [id], completedId: id })
 }
 
 /**
@@ -300,6 +322,10 @@ async function cmdAdd(args: string[], fx: Effects): Promise<number> {
     // No text on the command line means the menu triggered it: ask through the
     // same Quickshell menu the user is already looking at.
     const prompt = await fx.run(["omarchy-menu-input", "New task"])
+    if (prompt.code === 127) {
+      console.error("omadoist: no task text, and omarchy-menu-input is not installed to ask for it")
+      return 1
+    }
     content = prompt.stdout.trim()
     if (prompt.code !== 0 || !content) return 0 // cancelled
 
@@ -350,6 +376,10 @@ async function cmdFilter(args: string[], fx: Effects): Promise<number> {
     // current filter in the prompt since the input cannot be prefilled.
     const prompt = `Todoist filter — now: ${config.filter || "all"}  (all = no filter)`
     const input = await fx.run(["omarchy-menu-input", prompt, "--width", "560"])
+    if (input.code === 127) {
+      console.error("omadoist: omarchy-menu-input is not installed — pass the filter as arguments instead")
+      return 1
+    }
     if (input.code !== 0) return 0 // cancelled
     query = normalizeFilter(input.stdout.trim())
   } else {

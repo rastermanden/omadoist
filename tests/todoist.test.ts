@@ -67,8 +67,39 @@ test("pages are followed with the cursor the previous page handed back", async (
   expect(tasks.map((task) => task.id)).toEqual(["1", "2", "3"])
   expect(calls).toHaveLength(2)
   expect(calls[0]!.url.searchParams.has("cursor")).toBe(false)
-  expect(calls[0]!.url.searchParams.get("limit")).toBe("200")
   expect(calls[1]!.url.searchParams.get("cursor")).toBe("page-2")
+})
+
+test("paging continues on a cursor until max is reached", async () => {
+  const page = (cursor: string | null) => json({ results: [{ id: "a" }, { id: "b" }], next_cursor: cursor })
+  const calls = stub([page("c1"), page("c2"), page(null)])
+
+  expect(await fetchTasks("tok", "", 5)).toHaveLength(6)
+  expect(calls).toHaveLength(3)
+  expect(calls[1]!.url.searchParams.get("cursor")).toBe("c1")
+})
+
+test("the caller's max is what the API is asked for, not a hardcoded 200", async () => {
+  // Filter validation wants a single task: downloading 200 to learn that a
+  // query parses ran on every filter change, from the panel and the menu.
+  const calls = stub([json({ results: [{ id: "1" }], next_cursor: null })])
+  await fetchTasks("tok", "today", 1)
+  expect(calls).toHaveLength(1)
+  expect(calls[0]!.url.searchParams.get("limit")).toBe("1")
+  expect(calls[0]!.url.searchParams.get("query")).toBe("today")
+})
+
+test("a large max still asks for whole pages", async () => {
+  const calls = stub([json({ results: [], next_cursor: null })])
+  await fetchTasks("tok", "", 1000)
+  expect(calls[0]!.url.searchParams.get("limit")).toBe("200")
+  expect(calls[0]!.url.pathname).toEndWith("/tasks")
+})
+
+test("a max below one is still a legal request", async () => {
+  const calls = stub([json({ results: [], next_cursor: null })])
+  await fetchTasks("tok", "", 0)
+  expect(calls[0]!.url.searchParams.get("limit")).toBe("1")
 })
 
 test("paging stops once max rows are in hand, cursor or not", async () => {

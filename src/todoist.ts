@@ -86,7 +86,10 @@ async function paginate(token: string, path: string, params: Record<string, stri
   let cursor: string | null = null
 
   do {
-    const query = new URLSearchParams({ ...params, limit: String(PAGE_SIZE) })
+    // Ask for no more than the caller wants: filter validation wants one task,
+    // and downloading two hundred to learn that a query parses is the slowest
+    // part of every filter change.
+    const query = new URLSearchParams({ ...params, limit: String(Math.min(PAGE_SIZE, Math.max(1, max))) })
     if (cursor) query.set("cursor", cursor)
     const payload = await request(token, `${path}?${query}`)
     collected.push(...rowsOf(payload))

@@ -94,3 +94,36 @@ test("priority is flipped into the number people see, and the url falls back to 
 test("whitespace in titles is collapsed so a row stays on one line", () => {
   expect(toBarTask(task("a", "  Call\n  mom \t now "), new Map(), now).title).toBe("Call mom now")
 })
+
+test("a task still listed after being completed is named as rolled forward", () => {
+  // Todoist advances a recurring task instead of closing it, so `done` is
+  // followed by the very same row — with a new due date.
+  const recurring: Task = {
+    id: "r1",
+    content: "Spis mere kød",
+    project_id: "p1",
+    due: { date: "2026-08-30", is_recurring: true },
+  }
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks: [recurring], projects: [["p1", "Livsstil"]], inboxProjectId: "p1", lastError: null, lastCompleted: null }
+  const now = new Date("2026-08-29T10:00:00.000Z")
+
+  const view = buildBarView(cache, DEFAULT_CONFIG, true, now, null, "r1")
+  expect(view.rolledForward).toEqual({ id: "r1", title: "Spis mere kød", due: view.tasks[0]!.due })
+  expect(view.rolledForward!.due).not.toBe("")
+
+  // No completion, or one that really did close: nothing to confirm.
+  expect(buildBarView(cache, DEFAULT_CONFIG, true, now).rolledForward).toBeNull()
+  expect(buildBarView(cache, DEFAULT_CONFIG, true, now, null, "gone").rolledForward).toBeNull()
+})
+
+test("a rolled-forward row is named even when it falls outside the shown limit", () => {
+  const tasks: Task[] = Array.from({ length: 5 }, (_, i) => ({
+    id: `t${i}`,
+    content: `Task ${i}`,
+    due: { date: "2026-09-0" + (i + 1), is_recurring: true },
+  }))
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks, projects: [], inboxProjectId: "", lastError: null, lastCompleted: null }
+  const view = buildBarView(cache, { ...DEFAULT_CONFIG, limit: 1 }, true, new Date("2026-08-29T10:00:00.000Z"), null, "t4")
+  expect(view.tasks).toHaveLength(1)
+  expect(view.rolledForward?.id).toBe("t4")
+})
