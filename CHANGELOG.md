@@ -35,6 +35,14 @@ drift; bump both in the release commit.
   `omadoist status` prints the same reason. Bar view version 3.
   ([#8](https://github.com/rastermanden/omadoist/issues/8))
 
+- Undo a completion. A whole row completes on a plain left click, so a
+  mis-click is easy; a strip under the list now offers **Undo** (or `u`) for
+  twelve seconds after one, and `omadoist undo` / `omadoist reopen <task-id>`
+  do the same from a terminal. A recurring task was advanced rather than
+  closed, so no undo is offered for those and `omadoist undo` explains
+  instead — `omadoist reopen <id>` still obeys.
+  ([#9](https://github.com/rastermanden/omadoist/issues/9))
+
 ### Changed
 
 - The CLI is one callable function — `main(argv, effects)` behind an

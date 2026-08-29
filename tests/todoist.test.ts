@@ -5,6 +5,7 @@ import {
   fetchProjects,
   fetchTasks,
   quickAddTask,
+  reopenTask,
   TodoistError,
   verifyToken,
 } from "../src/todoist"
@@ -181,6 +182,13 @@ test("closeTask posts to the task's close endpoint with the id escaped", async (
   const calls = stub([new Response("", { status: 204 })])
   await closeTask("tok", "6X/7")
   expect(calls[0]!.url.pathname).toBe("/api/v1/tasks/6X%2F7/close")
+  expect(calls[0]!.init.method).toBe("POST")
+})
+
+test("reopenTask posts to the task's reopen endpoint", async () => {
+  const calls = stub([new Response("", { status: 204 })])
+  await reopenTask("tok", "6X/7")
+  expect(calls[0]!.url.pathname).toBe("/api/v1/tasks/6X%2F7/reopen")
   expect(calls[0]!.init.method).toBe("POST")
 })
 

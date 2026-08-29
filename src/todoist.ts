@@ -121,6 +121,11 @@ export async function closeTask(token: string, id: string): Promise<void> {
   await request(token, `/tasks/${encodeURIComponent(id)}/close`, { method: "POST" })
 }
 
+/** The other way: a task closed by mistake comes back where it was. */
+export async function reopenTask(token: string, id: string): Promise<void> {
+  await request(token, `/tasks/${encodeURIComponent(id)}/reopen`, { method: "POST" })
+}
+
 /**
  * Quick Add: the same parser Todoist's own composers use, so "buy milk
  * tomorrow p1 #Hus @errand" arrives as a task with a due date, a priority, a

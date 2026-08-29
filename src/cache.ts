@@ -3,6 +3,18 @@ import { ensureDir, writeAtomic } from "./files"
 import { parseSyncError, type SyncError } from "./sync"
 import type { Task } from "./todoist"
 
+/** The last task this machine completed, so `omadoist undo` knows which one. */
+export type Completion = {
+  id: string
+  title: string
+  /**
+   * Completing a recurring task advances it to its next due date rather than
+   * closing it, so there is nothing for a reopen to put back.
+   */
+  recurring: boolean
+  at: string
+}
+
 export type Cache = {
   fetchedAt: string
   tasks: Task[]
@@ -17,9 +29,30 @@ export type Cache = {
    * sets it back to null.
    */
   lastError: SyncError | null
+  /** Cleared once undone, so the same completion cannot be undone twice. */
+  lastCompleted: Completion | null
 }
 
-export const EMPTY_CACHE: Cache = { fetchedAt: "", tasks: [], projects: [], inboxProjectId: "", lastError: null }
+export const EMPTY_CACHE: Cache = {
+  fetchedAt: "",
+  tasks: [],
+  projects: [],
+  inboxProjectId: "",
+  lastError: null,
+  lastCompleted: null,
+}
+
+function parseCompletion(raw: unknown): Completion | null {
+  if (!raw || typeof raw !== "object") return null
+  const { id, title, recurring, at } = raw as Partial<Completion>
+  if (typeof id !== "string" || id === "") return null
+  return {
+    id,
+    title: typeof title === "string" ? title : "",
+    recurring: recurring === true,
+    at: typeof at === "string" ? at : "",
+  }
+}
 
 export async function loadCache(): Promise<Cache> {
   const file = Bun.file(CACHE_FILE)
@@ -32,6 +65,7 @@ export async function loadCache(): Promise<Cache> {
       projects: Array.isArray(cached.projects) ? cached.projects : [],
       inboxProjectId: typeof cached.inboxProjectId === "string" ? cached.inboxProjectId : "",
       lastError: parseSyncError(cached.lastError),
+      lastCompleted: parseCompletion(cached.lastCompleted),
     }
   } catch {
     return { ...EMPTY_CACHE }

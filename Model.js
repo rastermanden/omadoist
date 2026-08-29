@@ -264,6 +264,18 @@ function taskAt(tasks, index) {
   return tasks[index]
 }
 
+/**
+ * What an "Undo" would put back, or null when there is nothing to offer. A
+ * recurring task was not closed by being completed — it moved to its next due
+ * date — so reopening it would not undo anything, and the panel says nothing
+ * rather than something untrue.
+ */
+function undoableFrom(task) {
+  if (!task || task.id === undefined || task.id === null) return null
+  if (task.recurring === true) return null
+  return { id: String(task.id), title: String(task.title || "") }
+}
+
 function withPending(pending, id) {
   var next = {}
   for (var key in pending) next[key] = pending[key]
@@ -335,6 +347,7 @@ if (typeof module !== "undefined") {
     reconcilePending: reconcilePending,
     justRolledForward: justRolledForward,
     clearPending: clearPending,
+    undoableFrom: undoableFrom,
     todayUrl: todayUrl
   }
 }
