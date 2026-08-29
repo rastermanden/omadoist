@@ -62,6 +62,11 @@ removes those too.
 | `u` | undo the last completion |
 | `Tab` / `Esc` | next panel / close |
 
+A row shows its title, `due · project` and a priority dot, and nothing else:
+the list stays quiet. Move the cursor onto one — `j`/`k` or the mouse — and its
+description and labels appear under the list, so the rest of the rows do not
+move while you read.
+
 A completed row stays ticked and struck through until the next sync drops it,
 and a strip under the list then offers **Undo** (or `u`) for twelve seconds —
 a whole row completes on a plain left click, so a mis-click is easy. From a
@@ -164,6 +169,7 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
   "filter": "today | overdue",
   "limit": 25,
   "showDetails": true,
+  "showTaskDetails": true,
   "notifyRemoteChanges": true,
   "menuLabel": "Todoist",
   "menuIcon": "󰄲",
@@ -176,7 +182,9 @@ later, then priority); the bar count is however many tasks the last sync
 fetched — pages of 200 until it holds at least four times `limit` — so an
 account with hundreds of matching tasks counts low, and so does the "N more in
 Todoist" line under the list. `showDetails` adds the `due · project` subtitle
-in the menu. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row
+in the menu. `showTaskDetails` is the other one: the task's own description and
+labels, under the list for the row the cursor is on — off keeps them out of
+`bar.json` altogether. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row
 in the Omarchy menu; the glyph defaults to the Todoist mark, which exists only
 in the `Omadoist Icons` font `setup` installs, so any other glyph — the Nerd
 Font checkbox above, say — needs `menuIconFont` emptied to fall back to the

@@ -25,8 +25,14 @@ export type Config = {
   filter: string
   /** Maximum number of task rows written into the menu. */
   limit: number
-  /** Show "<due> · <project>" as the row subtitle. */
+  /** Show "<due> · <project>" as the row subtitle, in the menu and the panel. */
   showDetails: boolean
+  /**
+   * Carry each task's description and labels into the bar view, for the detail
+   * area the panel shows under the list for the row the cursor is on. Off
+   * keeps them out of bar.json entirely.
+   */
+  showTaskDetails: boolean
   /**
    * Notify when a sync finds tasks added or completed elsewhere (phone, web).
    * Local completes and adds never notify: the user just did them.
@@ -47,6 +53,7 @@ export const DEFAULT_CONFIG: Config = {
   filter: "",
   limit: 25,
   showDetails: true,
+  showTaskDetails: true,
   notifyRemoteChanges: true,
   menuLabel: "Todoist",
   // The Omarchy menu draws an extension row's icon as text, so the real Todoist
@@ -106,6 +113,7 @@ export function sanitizeConfig(raw: unknown): { config: Config; warnings: string
     filter: asString(given.filter, "filter", DEFAULT_CONFIG.filter, warnings),
     limit: asCount(given.limit, "limit", DEFAULT_CONFIG.limit, warnings),
     showDetails: asBoolean(given.showDetails, "showDetails", DEFAULT_CONFIG.showDetails, warnings),
+    showTaskDetails: asBoolean(given.showTaskDetails, "showTaskDetails", DEFAULT_CONFIG.showTaskDetails, warnings),
     notifyRemoteChanges: asBoolean(given.notifyRemoteChanges, "notifyRemoteChanges", DEFAULT_CONFIG.notifyRemoteChanges, warnings),
     menuLabel: asString(given.menuLabel, "menuLabel", DEFAULT_CONFIG.menuLabel, warnings),
     menuIcon: asString(given.menuIcon, "menuIcon", DEFAULT_CONFIG.menuIcon, warnings),

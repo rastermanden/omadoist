@@ -31,7 +31,7 @@ test("garbage in the cache file degrades to the empty view instead of throwing",
   expect(Model.parseView("{not json")).toEqual(Model.emptyView())
   expect(Model.parseView("[]")).toEqual(Model.emptyView())
   expect(Model.parseView('{"tasks":[null,{"title":"no id"},{"id":7}]}').tasks).toEqual([
-    { id: "7", title: "Untitled task", due: "", overdue: false, today: false, recurring: false, project: "", priority: 4, url: "https://app.todoist.com/app/task/7" },
+    { id: "7", title: "Untitled task", due: "", overdue: false, today: false, recurring: false, project: "", priority: 4, url: "https://app.todoist.com/app/task/7", description: "", labels: [] },
   ])
 })
 
@@ -241,4 +241,37 @@ test("a completed task offers a way back", () => {
 test("a recurring task offers nothing, because completing it closed nothing", () => {
   expect(Model.undoableFrom({ id: "7", title: "Water the plants", recurring: true })).toBeNull()
   expect(Model.undoableFrom(null)).toBeNull()
+})
+
+// ------------------------------------------------- a task's notes and labels
+
+test("the panel reads a task's description and labels off the view", () => {
+  const parsed = Model.parseView(JSON.stringify({
+    connected: true,
+    tasks: [{ id: "t1", title: "Ring VVS", description: "Spørg om prisen", labels: ["hjem", " gør det selv "] }],
+  }))
+  expect(parsed.tasks[0].description).toBe("Spørg om prisen")
+  expect(parsed.tasks[0].labels).toEqual(["hjem", "gør det selv"])
+})
+
+test("a label list that is not one is dropped rather than shown", () => {
+  const parsed = Model.parseView(JSON.stringify({
+    connected: true,
+    tasks: [{ id: "t1", title: "T", labels: "hjem" }, { id: "t2", title: "T", labels: [null, "", "ok"] }],
+  }))
+  expect(parsed.tasks[0].labels).toEqual([])
+  expect(parsed.tasks[1].labels).toEqual(["ok"])
+})
+
+test("the detail area earns its space only when there is something to put in it", () => {
+  expect(Model.hasDetail(null)).toBe(false)
+  expect(Model.hasDetail({ id: "t", description: "", labels: [] })).toBe(false)
+  expect(Model.hasDetail({ id: "t", description: "note", labels: [] })).toBe(true)
+  expect(Model.hasDetail({ id: "t", description: "", labels: ["hjem"] })).toBe(true)
+})
+
+test("labels are shown the way Todoist writes them", () => {
+  expect(Model.labelLine({ labels: ["hjem", "gør det selv"] })).toBe("@hjem  @gør det selv")
+  expect(Model.labelLine({ labels: [] })).toBe("")
+  expect(Model.labelLine(null)).toBe("")
 })

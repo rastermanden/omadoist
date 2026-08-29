@@ -101,6 +101,11 @@ Panel {
   // One cursor shared by keyboard and mouse; rows paint from hasCursor only.
   property bool cursorActive: false
   property int selectedIndex: 0
+  // The row the cursor is on, and what it has to say beyond its own line.
+  // Kept out of the rows themselves: the cursor follows the mouse, so an
+  // expanding row would reflow the list under the pointer that is moving it.
+  readonly property var cursorTask: cursorActive ? Model.taskAt(tasks, selectedIndex) : null
+  readonly property bool showDetail: Model.hasDetail(cursorTask)
 
   visible: opened || !(hideWhenEmpty && connected && tasks.length === 0)
   implicitWidth: button.implicitWidth
@@ -887,6 +892,36 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           wrapMode: Text.WordWrap
+        }
+
+        // ---------- The cursor row's own notes, which the quiet list leaves out ----------
+        Column {
+          visible: root.showDetail
+          width: parent.width
+          spacing: Style.space(4)
+
+          Text {
+            visible: text !== ""
+            width: parent.width
+            text: root.cursorTask ? root.cursorTask.description : ""
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+            // A description can run to pages; this is a glance, not a reader.
+            maximumLineCount: 6
+            elide: Text.ElideRight
+          }
+
+          Text {
+            visible: text !== ""
+            width: parent.width
+            text: Model.labelLine(root.cursorTask)
+            color: Color.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
         }
 
         Text {
