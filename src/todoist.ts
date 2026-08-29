@@ -121,11 +121,16 @@ export async function closeTask(token: string, id: string): Promise<void> {
   await request(token, `/tasks/${encodeURIComponent(id)}/close`, { method: "POST" })
 }
 
-/** Without a project id Todoist files the task in the Inbox, as it always has. */
-export async function createTask(token: string, content: string, projectId = ""): Promise<Task> {
-  return (await request(token, "/tasks", {
+/**
+ * Quick Add: the same parser Todoist's own composers use, so "buy milk
+ * tomorrow p1 #Hus @errand" arrives as a task with a due date, a priority, a
+ * project and a label rather than as that sentence. Anything it cannot parse
+ * stays in the title, so a plain sentence is still just a task.
+ */
+export async function quickAddTask(token: string, text: string): Promise<Task> {
+  return (await request(token, "/tasks/quick", {
     method: "POST",
-    body: JSON.stringify(projectId ? { content, project_id: projectId } : { content }),
+    body: JSON.stringify({ text }),
   })) as Task
 }
 

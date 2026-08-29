@@ -18,6 +18,14 @@ drift; bump both in the release commit.
   unambiguous prefix or an id. An account with only an Inbox is never asked.
   ([#1](https://github.com/rastermanden/omadoist/pull/1))
 
+- New tasks are parsed with Todoist's own Quick Add, so
+  `buy milk tomorrow p1 #Hus @errand` arrives as a task due tomorrow, at p1, in
+  #Hus, labelled @errand — dates, priorities, `#Project`, `/Section`, `@label`,
+  `{deadlines}`, `!reminders` and a trailing `// description`. A `#Project` in
+  the title routes the task and the picker is skipped; otherwise `--project`,
+  the panel dropdown or the menu prompt supplies one.
+  ([#7](https://github.com/rastermanden/omadoist/issues/7))
+
 ### Changed
 
 - The CLI is one callable function — `main(argv, effects)` behind an

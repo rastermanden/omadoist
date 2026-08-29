@@ -11,9 +11,10 @@ import { ensureDir, writeAtomic } from "./files"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
 import { spawnOptional } from "./proc"
+import { hasProjectToken, withProject } from "./quickadd"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
-import { closeTask, createTask, fetchLabels, fetchProjects, fetchTasks, TodoistError, verifyToken, type Task } from "./todoist"
+import { closeTask, fetchLabels, fetchProjects, fetchTasks, quickAddTask, TodoistError, verifyToken, type Task } from "./todoist"
 
 const APP = "Todoist"
 
@@ -260,7 +261,8 @@ async function cmdAdd(args: string[], fx: Effects): Promise<number> {
     content = prompt.stdout.trim()
     if (prompt.code !== 0 || !content) return 0 // cancelled
 
-    if (!target) {
+    // A `#Project` in what they just typed has answered the question already.
+    if (!target && !hasProjectToken(content)) {
       if (choices.length === 0) choices = projectChoices(await fetchProjects(token))
       const asked = await askProject(choices, fx)
       if (asked.cancelled) return 0
@@ -268,8 +270,18 @@ async function cmdAdd(args: string[], fx: Effects): Promise<number> {
     }
   }
 
-  const task = await createTask(token, content, target?.id)
-  console.log(`Added “${content}”${target ? ` to ${target.name}` : ""}`)
+  // The panel's composer always sends a `--project`, since its dropdown always
+  // has something selected; a `#Project` the user typed is the more deliberate
+  // of the two, so it wins and the flag stays the fallback.
+  const text = target ? withProject(content, target.name) : content
+  const task = await quickAddTask(token, text)
+
+  // Quick Add answers with what it made of the text — a date and a `#Project`
+  // are gone from the title by the time it comes back — so report that rather
+  // than what was typed.
+  const title = String(task.content ?? "").trim() || content
+  const landed = choices.find((choice) => choice.id === String(task.project_id ?? ""))?.name ?? ""
+  console.log(`Added “${title}”${landed ? ` to ${landed}` : ""}`)
   return cmdSync([], fx, { silentIds: [String(task.id)] })
 }
 
@@ -435,7 +447,8 @@ Usage:
   omadoist sync [--open]    Fetch tasks, rewrite the menu block and the bar view
   omadoist done <task-id>   Complete a task, then re-sync
   omadoist add [--project <name>] [text...]
-                            Add a task (prompts for text and project when empty)
+                            Add a task; the text takes Todoist's Quick Add
+                            syntax (dates, p1, #Project, @label, // description)
   omadoist filter [query]   Show or set the Todoist filter (--clear, --edit; "all" = none)
   omadoist list             Print the cached tasks
   omadoist menu             Rewrite the menu block and bar view from the cache only

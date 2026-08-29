@@ -643,7 +643,7 @@ Panel {
           TextField {
             id: addField
             width: parent.width
-            placeholderText: "What needs doing?  Enter adds · Esc cancels"
+            placeholderText: "What needs doing?  tomorrow p1 #Project @label"
             foreground: root.foreground
             font.family: root.fontFamily
             onAccepted: root.submitCompose()
