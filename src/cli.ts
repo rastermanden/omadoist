@@ -7,6 +7,7 @@ import { loadCache, saveCache, type Cache } from "./cache"
 import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
+import { writeAtomic } from "./files"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
 import { spawnOptional } from "./proc"
@@ -55,9 +56,12 @@ async function writeMenu(cache: Cache, config: Config, authenticated: boolean): 
 
 // The bar widget (plugin/Panel.qml) watches this file instead of re-deriving
 // sort order and due labels in QML: the CLI is the one place that knows them.
+// It watches with watchChanges: true, so a read must never land mid-write — a
+// truncated document fails to parse and the panel falls back to "not
+// connected" — hence the atomic rename.
 async function writeBar(cache: Cache, config: Config, authenticated: boolean, filterError: FilterError | null = null): Promise<void> {
   await mkdir(dirname(BAR_FILE), { recursive: true })
-  await Bun.write(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)))
+  await writeAtomic(BAR_FILE, JSON.stringify(buildBarView(cache, config, authenticated, new Date(), filterError)))
 }
 
 // Menu block and bar view always change together.

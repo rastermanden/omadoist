@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises"
 import { CACHE_DIR, CACHE_FILE } from "./config"
+import { writeAtomic } from "./files"
 import type { Task } from "./todoist"
 
 export type Cache = {
@@ -29,7 +30,9 @@ export async function loadCache(): Promise<Cache> {
   }
 }
 
+// A sync, a `done` and a filter change can all publish at once, and a
+// half-written cache reads as no tasks at all.
 export async function saveCache(cache: Cache): Promise<void> {
   await mkdir(CACHE_DIR, { recursive: true })
-  await Bun.write(CACHE_FILE, JSON.stringify(cache))
+  await writeAtomic(CACHE_FILE, JSON.stringify(cache))
 }
