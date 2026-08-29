@@ -12,7 +12,7 @@ function task(id: string, content: string, extra: Partial<Task> = {}): Task {
 }
 
 function cache(tasks: Task[]): Cache {
-  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "" }
+  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "", lastError: null }
 }
 
 test("rows come out sorted the way the menu sorts them, with display strings ready", () => {
@@ -41,7 +41,7 @@ test("rows come out sorted the way the menu sorts them, with display strings rea
 
 test("the projects ride along for the new-task picker, Inbox first", () => {
   const view = buildBarView(
-    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0" },
+    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0", lastError: null },
     config,
     true,
     now,

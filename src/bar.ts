@@ -2,10 +2,11 @@ import type { Cache } from "./cache"
 import type { Config } from "./config"
 import type { FilterError } from "./filter"
 import { choicesFromPairs, type ProjectChoice } from "./projects"
+import type { SyncError } from "./sync"
 import { formatDue, isOverdue, sortTasks } from "./tasks"
 import type { Task } from "./todoist"
 
-export const BAR_VIEW_VERSION = 2
+export const BAR_VIEW_VERSION = 3
 
 /** One row as the bar panel shows it. Everything is already a display string. */
 export type BarTask = {
@@ -33,6 +34,12 @@ export type BarView = {
   filter: string
   /** Set when the last attempt to change the filter was rejected; cleared by the next write. */
   filterError: FilterError | null
+  /**
+   * Why the last sync failed, or null. Together with `fetchedAt` this is what
+   * lets the panel tell "synced a minute ago" from "hasn't reached Todoist
+   * since yesterday".
+   */
+  syncError: SyncError | null
   connected: boolean
   /** The account's projects, Inbox first, for the new-task picker. */
   projects: ProjectChoice[]
@@ -100,6 +107,8 @@ export function buildBarView(
     connected,
     filter: config.filter.trim(),
     filterError,
+    // Nothing to be stale about before the account is connected.
+    syncError: connected ? cache.lastError : null,
     projects: [],
     count: 0,
     overdue: 0,

@@ -63,6 +63,13 @@ removes those too.
 
 A completed row stays ticked and struck through until the next sync drops it.
 
+When a sync does not land — no network, Todoist down, a token that has been
+revoked — the rows stay put and the panel says why, with the time they were
+last fetched. A rejected token gets a **Reconnect Todoist…** button, since
+that is the one case waiting does not fix. If the five-minute timer simply
+stops running, the panel says so once the list is three runs old.
+`omadoist status` prints the same reason.
+
 Keyboard shortcut — add to `~/.config/hypr/bindings.lua` (`SUPER+CTRL+T` is
 Omarchy's own Activity binding, so the ALT layer):
 

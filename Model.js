@@ -5,7 +5,7 @@ var TODOIST_TODAY = "https://app.todoist.com/app/today"
 var TODOIST_TASK = "https://app.todoist.com/app/task/"
 
 function emptyView() {
-  return { version: 2, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
+  return { version: 3, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, syncError: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
 }
 
 function count(value, fallback) {
@@ -56,6 +56,20 @@ function parseFilterError(raw) {
   }
 }
 
+var SYNC_ERROR_KINDS = { auth: true, offline: true, api: true }
+
+// Why the last sync did not land: {kind, message, at}, or null when it did.
+function parseSyncError(raw) {
+  if (!raw || typeof raw !== "object") return null
+  var message = String(raw.message || "").trim()
+  if (message === "") return null
+  return {
+    kind: SYNC_ERROR_KINDS[raw.kind] === true ? String(raw.kind) : "api",
+    message: message,
+    at: typeof raw.at === "string" ? raw.at : ""
+  }
+}
+
 // ~/.cache/omadoist/bar.json as written by `omadoist sync`. Anything
 // malformed degrades to the empty, disconnected view rather than throwing
 // inside the shell.
@@ -78,6 +92,7 @@ function parseView(raw) {
   view.connected = data.connected === true
   view.filter = typeof data.filter === "string" ? data.filter.trim() : ""
   view.filterError = parseFilterError(data.filterError)
+  view.syncError = parseSyncError(data.syncError)
   view.projects = parseProjects(data.projects)
   view.count = count(data.count, view.tasks.length)
   view.overdue = count(data.overdue, view.tasks.filter(function(task) { return task.overdue }).length)
@@ -154,16 +169,59 @@ function pad(n) {
 
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-// "synced 14:05" today, "synced 27 Aug" for anything older — a stale file
-// should read as stale.
-function syncedLabel(fetchedAt, now) {
+// "14:05" today, "27 Aug" for anything older — a stale file should read as
+// stale.
+function stampLabel(fetchedAt, now) {
   if (!fetchedAt) return ""
   var at = new Date(fetchedAt)
   if (isNaN(at.getTime())) return ""
   var ref = now || new Date()
   var sameDay = at.getFullYear() === ref.getFullYear() && at.getMonth() === ref.getMonth() && at.getDate() === ref.getDate()
-  if (sameDay) return "synced " + pad(at.getHours()) + ":" + pad(at.getMinutes())
-  return "synced " + at.getDate() + " " + MONTHS[at.getMonth()]
+  if (sameDay) return pad(at.getHours()) + ":" + pad(at.getMinutes())
+  return at.getDate() + " " + MONTHS[at.getMonth()]
+}
+
+function syncedLabel(fetchedAt, now) {
+  var stamp = stampLabel(fetchedAt, now)
+  return stamp === "" ? "" : "synced " + stamp
+}
+
+// Three runs of the five-minute sync timer. One missed run is a closed lid;
+// three in a row is something worth a line on screen.
+var STALE_AFTER_MS = 15 * 60 * 1000
+
+function ageMs(fetchedAt, now) {
+  if (!fetchedAt) return -1
+  var at = new Date(fetchedAt)
+  if (isNaN(at.getTime())) return -1
+  return (now || new Date()).getTime() - at.getTime()
+}
+
+/**
+ * The one line the panel shows when the list on screen is not what Todoist
+ * has: the reason `omadoist sync` left, or — if it left none and simply
+ * stopped running — how old the list is. Null while everything is current, and
+ * null before the account is connected, which has its own block.
+ *
+ * `reconnect` is true only for a rejected token, where waiting fixes nothing
+ * and `omadoist auth` is the whole answer.
+ */
+function syncWarning(view, now) {
+  if (!view || view.connected !== true) return null
+  var stamp = stampLabel(view.fetchedAt, now)
+  var showing = stamp === "" ? "Nothing has synced yet." : "Showing tasks from " + stamp + "."
+  var error = view.syncError
+
+  if (error) {
+    if (error.kind === "auth") {
+      return { message: "Todoist rejected the API token.", hint: showing + " Reconnect to start syncing again.", reconnect: true }
+    }
+    return { message: error.message, hint: showing, reconnect: false }
+  }
+
+  var age = ageMs(view.fetchedAt, now)
+  if (age < STALE_AFTER_MS) return null
+  return { message: "Not synced since " + stamp + ".", hint: "The five-minute sync has not run. Refresh, or check omadoist-sync.timer.", reconnect: false }
 }
 
 // What the rows are filtered by, for the line under the hero.
@@ -231,6 +289,7 @@ if (typeof module !== "undefined") {
     barTooltip: barTooltip,
     heroMeta: heroMeta,
     syncedLabel: syncedLabel,
+    syncWarning: syncWarning,
     subtitle: subtitle,
     filterLabel: filterLabel,
     defaultProjectId: defaultProjectId,

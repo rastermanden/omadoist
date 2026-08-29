@@ -133,3 +133,65 @@ test("a file with no projects leaves the picker empty and the target unset", () 
 test("priority tones", () => {
   expect([1, 2, 3, 4].map(Model.priorityTone)).toEqual(["urgent", "accent", "muted", "none"])
 })
+
+// ------------------------------------------------------- a sync that stopped
+
+const FRESH = "2026-08-29T12:00:00.000Z"
+const NOW = new Date("2026-08-29T12:05:00.000Z")
+
+function synced(extra = {}) {
+  return Model.parseView(JSON.stringify({ connected: true, fetchedAt: FRESH, tasks: [], ...extra }))
+}
+
+test("a sync that landed a moment ago says nothing", () => {
+  expect(Model.syncWarning(synced(), NOW)).toBeNull()
+})
+
+test("nothing is stale before the account is connected", () => {
+  expect(Model.syncWarning(Model.parseView("{}"), NOW)).toBeNull()
+  // Nor before the very first sync: the hero already reads "Not synced yet".
+  expect(Model.syncWarning(synced({ fetchedAt: "" }), NOW)).toBeNull()
+})
+
+test("three missed sync runs are worth a line, even with no error to report", () => {
+  const warning = Model.syncWarning(synced(), new Date("2026-08-29T12:16:00.000Z"))
+  expect(warning.message).toContain("Not synced since")
+  expect(warning.reconnect).toBe(false)
+  // Two missed runs are a closed lid, not a fault.
+  expect(Model.syncWarning(synced(), new Date("2026-08-29T12:14:00.000Z"))).toBeNull()
+})
+
+test("a rejected token says so at once, and offers the one thing that fixes it", () => {
+  const view = synced({ syncError: { kind: "auth", message: "Todoist rejected the API token.", at: FRESH } })
+  const warning = Model.syncWarning(view, NOW)
+  expect(warning.message).toBe("Todoist rejected the API token.")
+  expect(warning.hint).toContain("Showing tasks from 12:00")
+  expect(warning.reconnect).toBe(true)
+})
+
+test("a network failure reports itself and keeps the rows it has", () => {
+  const view = synced({ syncError: { kind: "offline", message: "Can't reach Todoist.", at: FRESH } })
+  const warning = Model.syncWarning(view, NOW)
+  expect(warning.message).toBe("Can't reach Todoist.")
+  expect(warning.hint).toBe("Showing tasks from 12:00.")
+  expect(warning.reconnect).toBe(false)
+})
+
+test("a view from another day says the day, not the hour", () => {
+  const view = Model.parseView(JSON.stringify({
+    connected: true,
+    fetchedAt: "2026-08-27T09:00:00.000Z",
+    syncError: { kind: "api", message: "Todoist API 500: down", at: FRESH },
+    tasks: [],
+  }))
+  expect(Model.syncWarning(view, NOW).hint).toBe("Showing tasks from 27 Aug.")
+})
+
+test("a malformed syncError is dropped rather than shown", () => {
+  expect(synced({ syncError: { kind: "auth" } }).syncError).toBeNull()
+  expect(synced({ syncError: "broken" }).syncError).toBeNull()
+  // An unknown kind still reports, it just does not claim to need a reconnect.
+  const odd = synced({ syncError: { kind: "meteor", message: "Something." } })
+  expect(odd.syncError.kind).toBe("api")
+  expect(Model.syncWarning(odd, NOW).reconnect).toBe(false)
+})
