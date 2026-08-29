@@ -1,0 +1,4 @@
+[test]
+# src/config.ts resolves its file paths once, at import, so the redirect has to
+# be in place before any test module is loaded.
+preload = ["./tests/preload.ts"]

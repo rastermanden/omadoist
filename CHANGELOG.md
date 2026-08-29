@@ -18,6 +18,16 @@ drift; bump both in the release commit.
   unambiguous prefix or an id. An account with only an Inbox is never asked.
   ([#1](https://github.com/rastermanden/omadoist/pull/1))
 
+### Changed
+
+- The CLI is one callable function — `main(argv, effects)` behind an
+  `import.meta.main` guard — rather than a module that ran at import and ended
+  in `process.exit`, with every spawn and notification behind one injectable
+  seam. `src/cli.ts` and `src/todoist.ts` have tests for the first time: the
+  sync diff, the add fallbacks, filter validation and the refused-query path,
+  and the API client against a stubbed `fetch`.
+  ([#6](https://github.com/rastermanden/omadoist/issues/6))
+
 ### Fixed
 
 - README: the settings section documents `menuIconFont`, the font the Omarchy
