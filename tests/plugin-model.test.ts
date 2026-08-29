@@ -133,3 +133,39 @@ test("a file with no projects leaves the picker empty and the target unset", () 
 test("priority tones", () => {
   expect([1, 2, 3, 4].map(Model.priorityTone)).toEqual(["urgent", "accent", "muted", "none"])
 })
+
+test("the view carries the task a completion rolled forward", () => {
+  const raw = JSON.stringify({
+    version: 2,
+    generatedAt: "2026-08-29T10:00:00.000Z",
+    connected: true,
+    tasks: [{ id: "r1", title: "Spis mere kød", due: "Tomorrow ↻", recurring: true }],
+    rolledForward: { id: "r1", title: "Spis mere kød", due: "Tomorrow ↻" },
+  })
+  expect(Model.parseView(raw).rolledForward).toEqual({ id: "r1", title: "Spis mere kød", due: "Tomorrow ↻" })
+  expect(Model.parseView(JSON.stringify({ version: 2 })).rolledForward).toBeNull()
+  expect(Model.parseView(JSON.stringify({ rolledForward: { title: "no id" } })).rolledForward).toBeNull()
+  expect(Model.emptyView().rolledForward).toBeNull()
+})
+
+test("the roll-forward is confirmed only while it is news", () => {
+  const view = {
+    generatedAt: "2026-08-29T10:00:00.000Z",
+    rolledForward: { id: "r1", title: "Spis mere kød", due: "Tomorrow ↻" },
+  }
+  const at = (seconds: number) => new Date(Date.parse(view.generatedAt) + seconds * 1000)
+
+  expect(Model.justRolledForward(view, at(2))?.id).toBe("r1")
+  // The slow poll re-reading the same bar.json an hour later must not tick the
+  // row all over again, nor must a shell restarted long afterwards.
+  expect(Model.justRolledForward(view, at(3600))).toBeNull()
+  expect(Model.justRolledForward({ ...view, generatedAt: "" }, at(2))).toBeNull()
+  expect(Model.justRolledForward({ generatedAt: view.generatedAt, rolledForward: null }, at(2))).toBeNull()
+})
+
+test("one pending mark can be released without disturbing the others", () => {
+  const pending = { a: true, b: true }
+  expect(Model.clearPending(pending, "a")).toEqual({ b: true })
+  expect(Model.clearPending(pending, "missing")).toEqual({ a: true, b: true })
+  expect(pending).toEqual({ a: true, b: true }) // not mutated
+})
