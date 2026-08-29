@@ -72,6 +72,11 @@ Panel {
   // Task id → true while `omadoist done` is in flight. The row stays put,
   // ticked and struck through, until the next bar.json no longer lists it.
   property var pending: ({})
+  // {id, title} of the last task completed here, for as long as the strip
+  // under the list offers to put it back. The pending window is far too short
+  // to hold this: it ends as soon as the next sync drops the row.
+  property var undoable: null
+  property bool undoing: false
   property bool refreshing: false
   property bool adding: false
   property bool composing: false
@@ -119,6 +124,14 @@ Panel {
       refreshing = false
       adding = false
       filterBusy = false
+      // The reopened task is back in the list, so the offer has been taken.
+      // Only then: every other sync — the one the completion itself triggers
+      // first of all — must leave the strip standing.
+      if (undoing) {
+        undoing = false
+        undoable = null
+        undoingTimeout.stop()
+      }
     }
   }
 
@@ -138,7 +151,19 @@ Panel {
     if (!task || pending[task.id] === true) return
     pending = Model.withPending(pending, task.id)
     pendingTimeout.restart()
+    // A mis-click is easy: the whole row completes on a plain left click. The
+    // way back was the Todoist web app until now.
+    undoable = Model.undoableFrom(task)
+    if (undoable !== null) undoTimeout.restart()
     exec([root.command, "done", String(task.id)])
+  }
+
+  function undo() {
+    if (undoable === null || undoing) return
+    undoing = true
+    undoTimeout.stop()
+    undoingTimeout.restart()
+    exec([root.command, "reopen", String(undoable.id)])
   }
 
   function refresh() {
@@ -292,6 +317,24 @@ Panel {
     onTriggered: root.refreshing = false
   }
 
+  // Long enough to notice the row go and reach for it, short enough that the
+  // strip is not still sitting there next time the panel is opened.
+  Timer {
+    id: undoTimeout
+    interval: 12000
+    onTriggered: root.undoable = null
+  }
+
+  // The reopen is out of our hands once spawned; clear the strip either way.
+  Timer {
+    id: undoingTimeout
+    interval: 30000
+    onTriggered: {
+      root.undoing = false
+      root.undoable = null
+    }
+  }
+
   Timer {
     id: addTimeout
     interval: 30000
@@ -408,6 +451,7 @@ Panel {
         else if (t === "r" || t === "R") root.refresh()
         else if (t === "f" || t === "F") root.startFilter()
         else if (t === "o" || t === "O") root.openTodoist("")
+        else if (t === "u" || t === "U") root.undo()
       }
 
       Column {
@@ -742,8 +786,74 @@ Panel {
           }
         }
 
+        // ---------- Just completed, and the way back ----------
+        CursorSurface {
+          visible: root.undoable !== null
+          width: parent.width
+          implicitHeight: undoContent.implicitHeight + Style.space(8)
+          foreground: root.foreground
+          fill: root.hoverFill
+          hasCursor: undoMouse.containsMouse
+
+          MouseArea {
+            id: undoMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.undo()
+          }
+
+          PanelToolTip {
+            visible: undoMouse.containsMouse
+            text: "Put it back"
+            fontFamily: root.fontFamily
+          }
+
+          Row {
+            id: undoContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: Style.space(10)
+            anchors.rightMargin: Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(8)
+
+            Text {
+              id: undoIcon
+              text: "󰕌"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              width: parent.width - undoIcon.width - undoAction.width - parent.spacing * 2
+              text: root.undoing ? "Putting it back…"
+                : root.undoable && root.undoable.title !== "" ? "Completed “" + root.undoable.title + "”"
+                : "Completed"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: undoAction
+              visible: !root.undoing
+              text: "Undo"
+              color: Color.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+        }
+
         Text {
-          visible: root.connected && root.tasks.length === 0
+          visible: root.connected && root.tasks.length === 0 && root.undoable === null
           width: parent.width
           text: root.view.fetchedAt === "" ? "Nothing synced yet — press r to fetch your tasks."
             : root.view.filter !== "" ? "Nothing matches this filter."

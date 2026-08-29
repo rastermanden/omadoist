@@ -59,9 +59,18 @@ removes those too.
 | `f` (or click the filter line) | change the Todoist filter; empty = all tasks |
 | `r` | re-sync |
 | `o` | open Todoist |
+| `u` | undo the last completion |
 | `Tab` / `Esc` | next panel / close |
 
-A completed row stays ticked and struck through until the next sync drops it.
+A completed row stays ticked and struck through until the next sync drops it,
+and a strip under the list then offers **Undo** (or `u`) for twelve seconds —
+a whole row completes on a plain left click, so a mis-click is easy. From a
+terminal, `omadoist undo` puts back the last task completed on this machine and
+`omadoist reopen <task-id>` puts back any task by id.
+
+Completing a *recurring* task moves it to its next due date rather than closing
+it, so there is nothing to reopen: no Undo is offered for those, and `omadoist
+undo` says why instead of doing something surprising.
 
 When a sync does not land — no network, Todoist down, a token that has been
 revoked — the rows stay put and the panel says why, with the time they were
@@ -174,6 +183,8 @@ the `due · project` subtitle in the menu. Change the sync interval in
 | `omadoist auth [token]` | Store the API token (mode 600) and sync |
 | `omadoist sync [--open]` | Fetch tasks, rewrite the menu block and the bar view |
 | `omadoist done <task-id>` | Complete a task and re-sync |
+| `omadoist undo` | Put back the last task completed on this machine |
+| `omadoist reopen <task-id>` | Put back a task by id |
 | `omadoist add [--project <name>] [text…]` | Add a task, parsing Quick Add syntax (`tomorrow`, `p1`, `#Project`, `@label`); with no text it prompts through the menu |
 | `omadoist filter [query]` | Show or set the filter (`--clear`, `--edit`) |
 | `omadoist list` / `status` | Print the cached tasks / where everything is |

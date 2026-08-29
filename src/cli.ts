@@ -13,7 +13,7 @@ import { hasProjectToken, withProject } from "./quickadd"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
 import { describeSyncError } from "./sync"
-import { closeTask, fetchLabels, fetchProjects, fetchTasks, quickAddTask, TodoistError, verifyToken, type Task } from "./todoist"
+import { closeTask, fetchLabels, fetchProjects, fetchTasks, quickAddTask, reopenTask, TodoistError, verifyToken, type Task } from "./todoist"
 
 const APP = "Todoist"
 
@@ -171,6 +171,8 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
     inboxProjectId: inboxId(choices),
     // This sync worked, so whatever the last one complained about is over.
     lastError: null,
+    // An undo is about what this machine just did, not about the fetch.
+    lastCompleted: previous.lastCompleted,
   }
   await saveCache(cache)
   await publish(cache, config, true)
@@ -189,6 +191,7 @@ async function cmdDone(args: string[], fx: Effects): Promise<number> {
 
   const token = await requireToken()
   const cache = await loadCache()
+  const completed = cache.tasks.find((candidate) => String(candidate.id) === id)
 
   await closeTask(token, id)
 
@@ -196,10 +199,57 @@ async function cmdDone(args: string[], fx: Effects): Promise<number> {
   // offers it, then refresh in full (a recurring task returns with a new due
   // date, and the API is the only source for that).
   const config = await loadConfig()
-  const pruned: Cache = { ...cache, tasks: cache.tasks.filter((candidate) => String(candidate.id) !== id) }
+  const pruned: Cache = {
+    ...cache,
+    tasks: cache.tasks.filter((candidate) => String(candidate.id) !== id),
+    // Remembered so `omadoist undo` needs no id, and so it can say what it is
+    // about to put back.
+    lastCompleted: {
+      id,
+      title: completed?.content ?? "",
+      recurring: completed?.due?.is_recurring === true,
+      at: new Date().toISOString(),
+    },
+  }
   await saveCache(pruned)
   await publish(pruned, config, true)
 
+  return cmdSync([], fx, { silentIds: [id] })
+}
+
+/**
+ * `undo` puts back the last thing completed here; `reopen <task-id>` puts back
+ * one named outright, which is the escape hatch when the memory has moved on
+ * or the completion happened somewhere else.
+ */
+async function cmdUndo(args: string[], fx: Effects): Promise<number> {
+  const named = args[0]?.trim() ?? ""
+  const cache = await loadCache()
+  const remembered = cache.lastCompleted
+
+  if (!named && !remembered) {
+    console.error("omadoist: nothing to undo here — name the task: omadoist reopen <task-id>")
+    return 1
+  }
+  // Completing a recurring task moved it on rather than closing it, so there
+  // is nothing to reopen. Say so instead of doing something surprising to it.
+  if (!named && remembered?.recurring) {
+    const title = remembered.title ? `“${remembered.title}”` : "That task"
+    console.error(`omadoist: ${title} is recurring — completing it moved it to its next due date rather than closing it.`)
+    console.error("  Change the date in Todoist, or reopen it outright: omadoist reopen " + remembered.id)
+    return 1
+  }
+
+  const id = named || remembered!.id
+  const token = await requireToken()
+  await reopenTask(token, id)
+
+  const title = !named && remembered?.title ? `“${remembered.title}”` : `task ${id}`
+  console.log(`Reopened ${title}`)
+  // One undo per completion: a second call should not silently reopen it again.
+  if (remembered?.id === id) await saveCache({ ...cache, lastCompleted: null })
+
+  // The task is about to reappear; that is this machine's doing, not news.
   return cmdSync([], fx, { silentIds: [id] })
 }
 
@@ -437,6 +487,8 @@ Usage:
   omadoist auth [token]     Store an API token and sync
   omadoist sync [--open]    Fetch tasks, rewrite the menu block and the bar view
   omadoist done <task-id>   Complete a task, then re-sync
+  omadoist undo             Put back the last task completed here
+  omadoist reopen <task-id> Put back a task by id
   omadoist add [--project <name>] [text...]
                             Add a task; the text takes Todoist's Quick Add
                             syntax (dates, p1, #Project, @label, // description)
@@ -464,6 +516,8 @@ export async function main(argv: string[], fx: Effects = systemEffects): Promise
       auth: () => cmdAuth(rest, fx),
       sync: () => cmdSync(rest, fx),
       done: () => cmdDone(rest, fx),
+      undo: () => cmdUndo(rest, fx),
+      reopen: () => cmdUndo(rest, fx),
       add: () => cmdAdd(rest, fx),
       filter: () => cmdFilter(rest, fx),
       list: () => cmdList(),
@@ -489,7 +543,7 @@ export async function main(argv: string[], fx: Effects = systemEffects): Promise
     console.error(`omadoist: ${message}`)
     // A sync runs on a timer every five minutes; the other three are things
     // the user just asked for, and a silent failure would be a lie.
-    if (["done", "add", "filter"].includes(command)) fx.notify("Todoist failed", message, "critical")
+    if (["done", "undo", "reopen", "add", "filter"].includes(command)) fx.notify("Todoist failed", message, "critical")
     return 1
   }
 }

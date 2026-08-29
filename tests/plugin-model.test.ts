@@ -195,3 +195,14 @@ test("a malformed syncError is dropped rather than shown", () => {
   expect(odd.syncError.kind).toBe("api")
   expect(Model.syncWarning(odd, NOW).reconnect).toBe(false)
 })
+
+// ------------------------------------------------------------------- undoing
+
+test("a completed task offers a way back", () => {
+  expect(Model.undoableFrom({ id: "7", title: "Water the plants" })).toEqual({ id: "7", title: "Water the plants" })
+})
+
+test("a recurring task offers nothing, because completing it closed nothing", () => {
+  expect(Model.undoableFrom({ id: "7", title: "Water the plants", recurring: true })).toBeNull()
+  expect(Model.undoableFrom(null)).toBeNull()
+})

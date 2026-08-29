@@ -276,6 +276,126 @@ test("done needs an id", async () => {
   expect(requests).toEqual([])
 })
 
+// ------------------------------------------------------------------- undoing
+
+const RECURRING = { id: "3", content: "Water the plants", due: { date: "2026-08-29", is_recurring: true } }
+
+test("undo puts back the last task completed here, without being told which", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  await main(["sync"], fx)
+
+  routes = []
+  connected([TASK])
+  api(post("/tasks/2/close", {}))
+  expect(await main(["done", "2"], fx)).toBe(0)
+
+  requests = []
+  routes = []
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  api(post("/tasks/2/reopen", {}))
+  expect(await main(["undo"], fx)).toBe(0)
+
+  expect(requests[0]!.url.pathname).toBe("/api/v1/tasks/2/reopen")
+  expect((await barView()).tasks.map((row) => row.id)).toEqual(["1", "2"])
+})
+
+test("the task coming back is this machine's doing, not remote news", async () => {
+  const { fx, notifications } = effects()
+  await saveToken("tok")
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  await main(["sync"], fx)
+
+  routes = []
+  connected([TASK])
+  api(post("/tasks/2/close", {}))
+  await main(["done", "2"], fx)
+
+  routes = []
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  api(post("/tasks/2/reopen", {}))
+  await main(["undo"], fx)
+
+  expect(notifications).toEqual([])
+})
+
+test("one undo per completion: the second call has nothing left to put back", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  await main(["sync"], fx)
+
+  routes = []
+  connected([TASK])
+  api(post("/tasks/2/close", {}))
+  await main(["done", "2"], fx)
+
+  routes = []
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  api(post("/tasks/2/reopen", {}))
+  await main(["undo"], fx)
+
+  requests = []
+  expect(await main(["undo"], fx)).toBe(1)
+  expect(requests).toEqual([])
+})
+
+test("undo with nothing remembered says so rather than guessing", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  await main(["sync"], fx)
+
+  requests = []
+  expect(await main(["undo"], fx)).toBe(1)
+  expect(requests).toEqual([])
+})
+
+test("a recurring task was advanced, not closed, so undo explains instead", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected([TASK, RECURRING])
+  await main(["sync"], fx)
+
+  routes = []
+  connected([TASK])
+  api(post("/tasks/3/close", {}))
+  await main(["done", "3"], fx)
+
+  requests = []
+  expect(await main(["undo"], fx)).toBe(1)
+  expect(requests).toEqual([])
+})
+
+test("reopen by id obeys, recurring or not — the user named the task", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected([TASK, RECURRING])
+  await main(["sync"], fx)
+
+  routes = []
+  connected([TASK])
+  api(post("/tasks/3/close", {}))
+  await main(["done", "3"], fx)
+
+  requests = []
+  routes = []
+  connected([TASK, RECURRING])
+  api(post("/tasks/3/reopen", {}))
+  expect(await main(["reopen", "3"], fx)).toBe(0)
+  expect(requests[0]!.url.pathname).toBe("/api/v1/tasks/3/reopen")
+})
+
+test("a reopen Todoist refuses exits 1 and says so out loud", async () => {
+  const { fx, notifications } = effects()
+  await saveToken("tok")
+  api(post("/tasks/9/reopen", { status: 404, text: "not found" }))
+
+  expect(await main(["reopen", "9"], fx)).toBe(1)
+  expect(notifications[0]).toMatchObject({ title: "Todoist failed", urgency: "critical" })
+})
+
 // ------------------------------------------------------------------------- add
 
 /** Quick Add answers with the parsed task; echo the text back minus the tokens. */
