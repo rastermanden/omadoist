@@ -100,6 +100,36 @@ test("a refused filter change rides along, with the suggestion when there is one
   expect(view({ filterError: { query: "x", message: "" } }).filterError).toBeNull()
 })
 
+test("the projects arrive as picker rows, with the Inbox as the default target", () => {
+  const parsed = view({
+    projects: [
+      { id: "p0", name: "Inbox", inbox: true },
+      { id: "p1", name: "  Work  place ", inbox: false },
+      { name: "no id" },
+      { id: "p3", name: "" },
+    ],
+  })
+  expect(parsed.projects).toEqual([
+    { id: "p0", name: "Inbox", inbox: true },
+    { id: "p1", name: "Work place", inbox: false },
+  ])
+  expect(Model.projectOptions(parsed)).toEqual([
+    { value: "p0", label: "Inbox" },
+    { value: "p1", label: "Work place" },
+  ])
+  expect(Model.defaultProjectId(parsed)).toBe("p0")
+  expect(Model.projectName(parsed, "p1")).toBe("Work place")
+  expect(Model.projectName(parsed, "gone")).toBe("")
+})
+
+test("a file with no projects leaves the picker empty and the target unset", () => {
+  const parsed = view({ projects: "nonsense" })
+  expect(parsed.projects).toEqual([])
+  expect(Model.defaultProjectId(parsed)).toBe("")
+  expect(Model.projectOptions(Model.emptyView())).toEqual([])
+  expect(Model.projectName(Model.emptyView(), "p0")).toBe("")
+})
+
 test("priority tones", () => {
   expect([1, 2, 3, 4].map(Model.priorityTone)).toEqual(["urgent", "accent", "muted", "none"])
 })

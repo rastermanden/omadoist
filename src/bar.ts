@@ -1,10 +1,11 @@
 import type { Cache } from "./cache"
 import type { Config } from "./config"
 import type { FilterError } from "./filter"
+import { choicesFromPairs, type ProjectChoice } from "./projects"
 import { formatDue, isOverdue, sortTasks } from "./tasks"
 import type { Task } from "./todoist"
 
-export const BAR_VIEW_VERSION = 1
+export const BAR_VIEW_VERSION = 2
 
 /** One row as the bar panel shows it. Everything is already a display string. */
 export type BarTask = {
@@ -33,6 +34,8 @@ export type BarView = {
   /** Set when the last attempt to change the filter was rejected; cleared by the next write. */
   filterError: FilterError | null
   connected: boolean
+  /** The account's projects, Inbox first, for the new-task picker. */
+  projects: ProjectChoice[]
   /** Open tasks in the cache, which may be more than the rows listed. */
   count: number
   overdue: number
@@ -97,12 +100,15 @@ export function buildBarView(
     connected,
     filter: config.filter.trim(),
     filterError,
+    projects: [],
     count: 0,
     overdue: 0,
     today: 0,
     tasks: [],
   }
   if (!connected) return view
+
+  view.projects = choicesFromPairs(cache.projects, cache.inboxProjectId)
 
   const projects = new Map(cache.projects)
   const rows = sortTasks(cache.tasks).map((task) => toBarTask(task, projects, now))

@@ -8,6 +8,7 @@ import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
+import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
 import { closeTask, createTask, fetchLabels, fetchProjects, fetchTasks, TodoistError, verifyToken, type Task } from "./todoist"
@@ -95,7 +96,7 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
   const previous = await loadCache()
 
   if (!token) {
-    await publish({ fetchedAt: "", tasks: [], projects: [] }, config, false)
+    await publish({ fetchedAt: "", tasks: [], projects: [], inboxProjectId: "" }, config, false)
     // Not an error, just unconfigured: the menu now carries a "Connect
     // Todoist…" row, and the sync timer should not keep failing in the journal.
     console.error("omadoist: not connected — run `omadoist auth`")
@@ -103,10 +104,13 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
     return 0
   }
 
+  // The projects come along on every sync, not just when the menu shows them
+  // in a subtitle: the new-task picker is filled from the same cache.
   const [tasks, projects] = await Promise.all([
     fetchTasks(token, config.filter, config.limit * 4),
-    config.showDetails ? fetchProjects(token) : Promise.resolve(new Map<string, string>()),
+    fetchProjects(token),
   ])
+  const choices = projectChoices(projects)
 
   // Changes made elsewhere — on the phone, on the web — are worth a heads-up.
   // Not before the first sync, when everything would look new.
@@ -118,7 +122,8 @@ async function cmdSync(args: string[], { silentIds = [], notifyChanges = true }:
   const cache: Cache = {
     fetchedAt: new Date().toISOString(),
     tasks,
-    projects: [...projects.entries()],
+    projects: choices.map((choice) => [choice.id, choice.name] as [string, string]),
+    inboxProjectId: inboxId(choices),
   }
   await saveCache(cache)
   await publish(cache, config, true)
@@ -151,8 +156,54 @@ async function cmdDone(args: string[]): Promise<number> {
   return cmdSync([], { silentIds: [id] })
 }
 
+/**
+ * Which project the task belongs to, asked through the same Omarchy menu the
+ * user is already looking at. An account with nothing but an Inbox is not
+ * worth a question, and a shell without the picker gets the Inbox rather than
+ * a failed add.
+ */
+async function askProject(choices: ProjectChoice[]): Promise<{ cancelled: boolean; choice: ProjectChoice | null }> {
+  if (choices.length < 2) return { cancelled: false, choice: choices[0] ?? null }
+
+  let picker
+  try {
+    picker = Bun.spawn(["omarchy-menu-select", "Project", ...choices.map((choice) => choice.name), "--", "--width", "460"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+  } catch {
+    return { cancelled: false, choice: null }
+  }
+
+  const answer = (await new Response(picker.stdout).text()).trim()
+  if ((await picker.exited) !== 0 || !answer) return { cancelled: true, choice: null }
+  // The menu hands back "<label>\t<subtext>" when a row carries one.
+  return { cancelled: false, choice: resolveProject(choices, answer.split("\t")[0] ?? answer) }
+}
+
 async function cmdAdd(args: string[]): Promise<number> {
-  let content = args.join(" ").trim()
+  const { project: wanted, words } = parseAddArgs(args)
+  let content = words.join(" ").trim()
+
+  const token = await requireToken()
+  const cache = await loadCache()
+  // The cache is the fast path; a project made since the last sync only exists
+  // in the API, so a name that misses there is worth one fresh look.
+  let choices = choicesFromPairs(cache.projects, cache.inboxProjectId)
+  let target: ProjectChoice | null = null
+
+  if (wanted) {
+    target = resolveProject(choices, wanted)
+    if (!target) {
+      choices = projectChoices(await fetchProjects(token))
+      target = resolveProject(choices, wanted)
+    }
+    if (!target) {
+      console.error(`omadoist: no project matching '${wanted}'`)
+      if (choices.length > 0) console.error(`  projects: ${choices.map((choice) => choice.name).join(", ")}`)
+      return 1
+    }
+  }
 
   if (!content) {
     // No text on the command line means the menu triggered it: ask through the
@@ -160,10 +211,17 @@ async function cmdAdd(args: string[]): Promise<number> {
     const prompt = Bun.spawn(["omarchy-menu-input", "New task"], { stdout: "pipe", stderr: "ignore" })
     content = (await new Response(prompt.stdout).text()).trim()
     if ((await prompt.exited) !== 0 || !content) return 0 // cancelled
+
+    if (!target) {
+      if (choices.length === 0) choices = projectChoices(await fetchProjects(token))
+      const asked = await askProject(choices)
+      if (asked.cancelled) return 0
+      target = asked.choice
+    }
   }
 
-  const token = await requireToken()
-  const task = await createTask(token, content)
+  const task = await createTask(token, content, target?.id)
+  console.log(`Added “${content}”${target ? ` to ${target.name}` : ""}`)
   return cmdSync([], { silentIds: [String(task.id)] })
 }
 
@@ -325,7 +383,8 @@ Usage:
   omadoist auth [token]     Store an API token and sync
   omadoist sync [--open]    Fetch tasks, rewrite the menu block and the bar view
   omadoist done <task-id>   Complete a task, then re-sync
-  omadoist add [text...]    Add a task (prompts through the menu when empty)
+  omadoist add [--project <name>] [text...]
+                            Add a task (prompts for text and project when empty)
   omadoist filter [query]   Show or set the Todoist filter (--clear, --edit; "all" = none)
   omadoist list             Print the cached tasks
   omadoist menu             Rewrite the menu block and bar view from the cache only

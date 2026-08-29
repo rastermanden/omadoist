@@ -20,7 +20,13 @@ export type Task = {
   url?: string
 }
 
-export type Project = { id: string; name: string }
+export type Project = {
+  id: string
+  name: string
+  /** v1 says `inbox_project`; the older REST shape said `is_inbox_project`. */
+  inbox_project?: boolean
+  is_inbox_project?: boolean
+}
 
 export class TodoistError extends Error {
   constructor(
@@ -98,9 +104,9 @@ export async function fetchTasks(token: string, filter: string, max: number): Pr
   return rows as Task[]
 }
 
-export async function fetchProjects(token: string): Promise<Map<string, string>> {
-  const rows = (await paginate(token, "/projects", {}, 1000)) as Project[]
-  return new Map(rows.map((project) => [String(project.id), project.name]))
+/** Every project on the account, in the account's own order. */
+export async function fetchProjects(token: string): Promise<Project[]> {
+  return (await paginate(token, "/projects", {}, 1000)) as Project[]
 }
 
 export async function fetchLabels(token: string): Promise<string[]> {
@@ -112,10 +118,11 @@ export async function closeTask(token: string, id: string): Promise<void> {
   await request(token, `/tasks/${encodeURIComponent(id)}/close`, { method: "POST" })
 }
 
-export async function createTask(token: string, content: string): Promise<Task> {
+/** Without a project id Todoist files the task in the Inbox, as it always has. */
+export async function createTask(token: string, content: string, projectId = ""): Promise<Task> {
   return (await request(token, "/tasks", {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(projectId ? { content, project_id: projectId } : { content }),
   })) as Task
 }
 

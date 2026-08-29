@@ -11,8 +11,9 @@ of the shell. The same list lives under **Todoist** in the Omarchy menu.
 
 - Open-task count in the bar, in the urgent colour when something is overdue.
 - A panel with your tasks: due date, project, priority; `Enter` completes.
-- Inline **New task** (`n`) and **Filter** (`f`) fields; the whole Todoist
-  filter language works, with a plain-language "did you mean …" when it doesn't.
+- Inline **New task** (`n`) with a searchable project picker, and **Filter**
+  (`f`); the whole Todoist filter language works, with a plain-language "did
+  you mean …" when it doesn't.
 - The list under **Todoist** in the Omarchy menu, so `Super+Space` → "todo"
   finds it too.
 - A five-minute background sync, and notifications only for tasks added or
@@ -54,7 +55,7 @@ removes those too.
 | Row, click / `Enter` / `Space` | complete the task |
 | Row, right click | open the task in Todoist |
 | `j` `k` / arrows | move the cursor |
-| `n` | new task (`Enter` adds, `Esc` cancels) |
+| `n` | new task (`Tab` picks the project, `Enter` adds, `Esc` cancels) |
 | `f` (or click the filter line) | change the Todoist filter; empty = all tasks |
 | `r` | re-sync |
 | `o` | open Todoist |
@@ -70,6 +71,22 @@ o.bind("SUPER + ALT + T", "Todoist", "omarchy-shell shell toggle omadoist")
 ```
 
 Scriptable over shell IPC: `omarchy-shell omadoist refresh|add|filter|toggle`.
+
+### New tasks
+
+`n` in the panel opens the title field with a project picker under it, set to
+your Inbox. `Tab` opens the picker, typing searches it; the choice sticks
+for as long as the panel stays open, so a run of tasks can go to one project.
+The **New task…** menu row asks for the title and then the project through the
+Omarchy menu. From a terminal it is a flag:
+
+```bash
+omadoist add --project Hus "Sæt de sidste plader op"
+```
+
+`--project` takes a project name, a `#Name`, an unambiguous start of one
+(`--project hus`), or the id the panel passes. An account with nothing but an
+Inbox is never asked the question.
 
 ### Filters
 
@@ -135,7 +152,7 @@ the `due · project` subtitle in the menu. Change the sync interval in
 | `omadoist auth [token]` | Store the API token (mode 600) and sync |
 | `omadoist sync [--open]` | Fetch tasks, rewrite the menu block and the bar view |
 | `omadoist done <task-id>` | Complete a task and re-sync |
-| `omadoist add [text…]` | Add a task; with no text it prompts through the menu |
+| `omadoist add [--project <name>] [text…]` | Add a task; with no text it prompts for title and project through the menu |
 | `omadoist filter [query]` | Show or set the filter (`--clear`, `--edit`) |
 | `omadoist list` / `status` | Print the cached tasks / where everything is |
 | `omadoist menu` | Rewrite the menu block and bar view from cache only |

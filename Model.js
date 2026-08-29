@@ -5,7 +5,7 @@ var TODOIST_TODAY = "https://app.todoist.com/app/today"
 var TODOIST_TASK = "https://app.todoist.com/app/task/"
 
 function emptyView() {
-  return { version: 1, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, count: 0, overdue: 0, today: 0, tasks: [] }
+  return { version: 2, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
 }
 
 function count(value, fallback) {
@@ -28,6 +28,20 @@ function normalizeTask(raw) {
     priority: priority,
     url: typeof raw.url === "string" && raw.url !== "" ? raw.url : TODOIST_TASK + encodeURIComponent(id)
   }
+}
+
+// The account's projects, Inbox first, as `omadoist sync` wrote them.
+function parseProjects(raw) {
+  if (!Array.isArray(raw)) return []
+  var out = []
+  for (var i = 0; i < raw.length; i++) {
+    var project = raw[i]
+    if (!project || typeof project !== "object" || project.id === undefined || project.id === null) continue
+    var name = String(project.name || "").replace(/\s+/g, " ").trim()
+    if (name === "") continue
+    out.push({ id: String(project.id), name: name, inbox: project.inbox === true })
+  }
+  return out
 }
 
 // Why the last filter change was refused, and what was probably meant.
@@ -64,10 +78,42 @@ function parseView(raw) {
   view.connected = data.connected === true
   view.filter = typeof data.filter === "string" ? data.filter.trim() : ""
   view.filterError = parseFilterError(data.filterError)
+  view.projects = parseProjects(data.projects)
   view.count = count(data.count, view.tasks.length)
   view.overdue = count(data.overdue, view.tasks.filter(function(task) { return task.overdue }).length)
   view.today = count(data.today, view.tasks.filter(function(task) { return task.today }).length)
   return view
+}
+
+// The project a new task lands in unless the user picks another — the Inbox,
+// the same default Todoist itself uses. Empty when nothing is synced yet, and
+// the CLI then leaves the choice to Todoist.
+function defaultProjectId(view) {
+  var projects = (view && view.projects) || []
+  for (var i = 0; i < projects.length; i++) {
+    if (projects[i].inbox) return projects[i].id
+  }
+  return ""
+}
+
+// The dropdown wants {value, label} rows; the id is what the CLI is told.
+function projectOptions(view) {
+  var projects = (view && view.projects) || []
+  var options = []
+  for (var i = 0; i < projects.length; i++) {
+    options.push({ value: projects[i].id, label: projects[i].name })
+  }
+  return options
+}
+
+function projectName(view, id) {
+  var projects = (view && view.projects) || []
+  var wanted = String(id || "")
+  if (wanted === "") return ""
+  for (var i = 0; i < projects.length; i++) {
+    if (projects[i].id === wanted) return projects[i].name
+  }
+  return ""
 }
 
 function plural(n, word) {
@@ -187,6 +233,9 @@ if (typeof module !== "undefined") {
     syncedLabel: syncedLabel,
     subtitle: subtitle,
     filterLabel: filterLabel,
+    defaultProjectId: defaultProjectId,
+    projectOptions: projectOptions,
+    projectName: projectName,
     priorityTone: priorityTone,
     clampIndex: clampIndex,
     taskAt: taskAt,
