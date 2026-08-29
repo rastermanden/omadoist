@@ -53,3 +53,80 @@ test("a file that is not an object at all is ignored with a word about it", () =
 test("keys the tool does not know are dropped, not carried into the program", () => {
   expect(sanitizeConfig({ nonsense: { deep: true } }).config).toEqual(DEFAULT_CONFIG)
 })
+
+// --------------------------------------------------------- saved filters
+
+test("a fresh install has something to switch between", () => {
+  const { config } = sanitizeConfig({})
+  expect(config.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "p1", "All"])
+  // "All" is the empty query, which is what marks it current when nothing is filtered.
+  expect(config.filters.at(-1)!.query).toBe("")
+})
+
+test("saved queries are normalised the way the CLI normalises a typed one", () => {
+  const { config, warnings } = sanitizeConfig({
+    filters: [{ name: "  Due   soon ", query: "  today | overdue  " }, { name: "Everything", query: "all" }],
+  })
+  expect(config.filters).toEqual([
+    { name: "Due soon", query: "today | overdue" },
+    { name: "Everything", query: "" },
+  ])
+  expect(warnings).toEqual([])
+})
+
+test("a missing query is the all-tasks preset, not a broken chip", () => {
+  const { config, warnings } = sanitizeConfig({ filters: [{ name: "Everything" }] })
+  expect(config.filters).toEqual([{ name: "Everything", query: "" }])
+  expect(warnings).toEqual([])
+})
+
+test("one bad entry costs that chip, not the whole row", () => {
+  const { config, warnings } = sanitizeConfig({
+    filters: [
+      { name: "Today", query: "today" },
+      "not an object",
+      { query: "nameless" },
+      { name: "  ", query: "blank" },
+      { name: "Bad", query: 7 },
+      { name: "Overdue", query: "overdue" },
+    ],
+  })
+  expect(config.filters).toEqual([
+    { name: "Today", query: "today" },
+    { name: "Overdue", query: "overdue" },
+  ])
+  expect(warnings).toHaveLength(4)
+})
+
+test("a repeated name is dropped: two identical chips is a mistake, not a choice", () => {
+  const { config, warnings } = sanitizeConfig({
+    filters: [{ name: "Today", query: "today" }, { name: "today", query: "tomorrow" }],
+  })
+  expect(config.filters).toEqual([{ name: "Today", query: "today" }])
+  expect(warnings[0]).toContain("repeats the name")
+})
+
+test("filters that are not a list fall back to the defaults with a word", () => {
+  const { config, warnings } = sanitizeConfig({ filters: "today" })
+  expect(config.filters).toEqual(DEFAULT_CONFIG.filters)
+  expect(warnings[0]).toContain("filters")
+})
+
+test("an empty list is a deliberate no chips at all", () => {
+  const { config, warnings } = sanitizeConfig({ filters: [] })
+  expect(config.filters).toEqual([])
+  expect(warnings).toEqual([])
+})
+
+test("a long list is cut to a row rather than becoming a filter manager", () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ name: `F${i}`, query: `p${(i % 4) + 1}` }))
+  const { config, warnings } = sanitizeConfig({ filters: many })
+  expect(config.filters).toHaveLength(12)
+  expect(warnings[0]).toContain("keeps the first 12")
+})
+
+test("the defaults are copied, so one config cannot edit the next", () => {
+  const { config } = sanitizeConfig({})
+  config.filters[0]!.name = "Changed"
+  expect(DEFAULT_CONFIG.filters[0]!.name).toBe("Today")
+})

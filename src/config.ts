@@ -2,6 +2,7 @@ import { chmod } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { ensureDir } from "./files"
+import { normalizeFilter } from "./filter"
 
 const HOME = homedir()
 const XDG_CONFIG = process.env.XDG_CONFIG_HOME || join(HOME, ".config")
@@ -20,9 +21,22 @@ export const BAR_FILE = join(CACHE_DIR, "bar.json")
 export const MENU_FILE =
   process.env.OMADOIST_MENU_FILE || join(XDG_CONFIG, "omarchy", "extensions", "omarchy-menu.jsonc")
 
+/** One filter kept by name, so switching is a click rather than a retype. */
+export type SavedFilter = {
+  name: string
+  /** The Todoist query. Empty is the "all active tasks" preset. */
+  query: string
+}
+
 export type Config = {
   /** Todoist filter query, e.g. "today | overdue". Empty means every active task. */
   filter: string
+  /**
+   * Filters kept by name, shown as chips above the task list and as menu rows.
+   * The one matching `filter` is marked. An empty list simply hides the chips;
+   * the filter line stays the way to type any other query.
+   */
+  filters: SavedFilter[]
   /** Maximum number of task rows written into the menu. */
   limit: number
   /** Show "<due> · <project>" as the row subtitle, in the menu and the panel. */
@@ -49,8 +63,20 @@ export type Config = {
   menuIconFont: string
 }
 
+// A row of chips, not a list: past a dozen the panel is a filter manager.
+const MAX_FILTERS = 12
+const MAX_FILTER_NAME = 24
+
 export const DEFAULT_CONFIG: Config = {
   filter: "",
+  // What a fresh install is most likely to flip between. "All" is the empty
+  // query, the same thing `omadoist filter --clear` sets.
+  filters: [
+    { name: "Today", query: "today" },
+    { name: "Overdue", query: "overdue" },
+    { name: "p1", query: "p1" },
+    { name: "All", query: "" },
+  ],
   limit: 25,
   showDetails: true,
   showTaskDetails: true,
@@ -87,6 +113,50 @@ function asCount(value: unknown, key: string, fallback: number, warnings: string
   return fallback
 }
 
+/**
+ * Saved filters, each dropped on its own: one malformed entry in a hand-edited
+ * list should cost that chip, not the whole row of them. Queries go through
+ * the same normalisation the CLI applies, so a saved "all" is the empty query
+ * and marks itself as current when nothing is filtered.
+ */
+function asFilters(value: unknown, key: string, fallback: SavedFilter[], warnings: string[]): SavedFilter[] {
+  if (value === undefined) return fallback.map((saved) => ({ ...saved }))
+  if (!Array.isArray(value)) {
+    warnings.push(`${key} should be a list of {name, query}, not ${describe(value)}; using the defaults`)
+    return fallback.map((saved) => ({ ...saved }))
+  }
+
+  const saved: SavedFilter[] = []
+  const seen = new Set<string>()
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      warnings.push(`${key}[${index}] should be {name, query}, not ${describe(entry)}; skipping it`)
+      continue
+    }
+    const { name, query } = entry as { name?: unknown; query?: unknown }
+    if (typeof name !== "string" || name.trim() === "") {
+      warnings.push(`${key}[${index}] needs a name; skipping it`)
+      continue
+    }
+    if (query !== undefined && typeof query !== "string") {
+      warnings.push(`${key}[${index}].query should be a string, not ${describe(query)}; skipping it`)
+      continue
+    }
+    const label = name.replace(/\s+/g, " ").trim().slice(0, MAX_FILTER_NAME)
+    if (seen.has(label.toLowerCase())) {
+      warnings.push(`${key}[${index}] repeats the name ${JSON.stringify(label)}; skipping it`)
+      continue
+    }
+    seen.add(label.toLowerCase())
+    saved.push({ name: label, query: normalizeFilter(String(query ?? "")) })
+    if (saved.length === MAX_FILTERS) {
+      if (value.length > MAX_FILTERS) warnings.push(`${key} keeps the first ${MAX_FILTERS}; the rest are ignored`)
+      break
+    }
+  }
+  return saved
+}
+
 function describe(value: unknown): string {
   if (value === null) return "null"
   if (Array.isArray(value)) return "an array"
@@ -111,6 +181,7 @@ export function sanitizeConfig(raw: unknown): { config: Config; warnings: string
   const given = raw as Partial<Record<keyof Config, unknown>>
   const config: Config = {
     filter: asString(given.filter, "filter", DEFAULT_CONFIG.filter, warnings),
+    filters: asFilters(given.filters, "filters", DEFAULT_CONFIG.filters, warnings),
     limit: asCount(given.limit, "limit", DEFAULT_CONFIG.limit, warnings),
     showDetails: asBoolean(given.showDetails, "showDetails", DEFAULT_CONFIG.showDetails, warnings),
     showTaskDetails: asBoolean(given.showTaskDetails, "showTaskDetails", DEFAULT_CONFIG.showTaskDetails, warnings),

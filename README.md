@@ -56,7 +56,8 @@ removes those too.
 | Row, right click | open the task in Todoist |
 | `j` `k` / arrows | move the cursor |
 | `n` | new task, in Quick Add syntax (`Tab` picks the project, `Enter` adds, `Esc` cancels) |
-| `f` (or click the filter line) | change the Todoist filter; empty = all tasks |
+| click a filter chip | switch to a saved filter |
+| `f` (or click the filter line) | type any other Todoist filter; empty = all tasks |
 | `r` | re-sync |
 | `o` | open Todoist |
 | `u` | undo the last completion |
@@ -131,9 +132,17 @@ Any [Todoist filter query](https://todoist.com/help/articles/introduction-to-fil
 `today | overdue`, `next 7 days & #Work`, `p1 | (p2 & next 7 days)`, `no date`,
 `search: milk`, `@errand`, `!subtask` …
 
-Set it with `f` in the panel, the **Filter…** menu row, or
-`omadoist filter "today | overdue"` (`--clear`, or `all`, for none). Every
-route checks the query with Todoist before saving it, and a refused one comes
+The ones you switch between live in `config.json` under `filters`, as a row of
+chips above the task list and as menu rows, with the one in force marked.
+A fresh install gets **Today**, **Overdue**, **p1** and **All**; edit the list
+to keep your own. A single chip is no choice at all, so the row hides itself
+until there are two.
+
+Anything else is typed: `f` in the panel or a click on the filter line, the
+**Filter…** menu row, or `omadoist filter "today | overdue"` (`--clear`, or
+`all`, for none). A saved chip takes the same route, so a preset is checked
+against Todoist before it lands and cannot leave the five-minute timer failing.
+Every route checks the query with Todoist before saving it, and a refused one comes
 back in words with a fix one click away: `todya | overdeu` → *Did you mean
 “today | overdue”?*, `today or overdue` → `today | overdue`, `#Livstil` →
 `#Livsstil`. A project or label that doesn't exist gets a nudge too, since
@@ -168,6 +177,12 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
 {
   "filter": "today | overdue",
   "limit": 25,
+  "filters": [
+    { "name": "Today", "query": "today" },
+    { "name": "Overdue", "query": "overdue" },
+    { "name": "p1", "query": "p1" },
+    { "name": "All", "query": "" }
+  ],
   "showDetails": true,
   "showTaskDetails": true,
   "notifyRemoteChanges": true,
@@ -184,7 +199,10 @@ account with hundreds of matching tasks counts low, and so does the "N more in
 Todoist" line under the list. `showDetails` adds the `due · project` subtitle
 in the menu. `showTaskDetails` is the other one: the task's own description and
 labels, under the list for the row the cursor is on — off keeps them out of
-`bar.json` altogether. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row
+`bar.json` altogether. `filters` are the saved queries above the list, up to
+twelve; a malformed entry is skipped with a line on stderr rather than costing
+the rest, `"query": ""` (or `"all"`) is the all-tasks preset, and `[]` hides
+the chip row. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row
 in the Omarchy menu; the glyph defaults to the Todoist mark, which exists only
 in the `Omadoist Icons` font `setup` installs, so any other glyph — the Nerd
 Font checkbox above, say — needs `menuIconFont` emptied to fall back to the

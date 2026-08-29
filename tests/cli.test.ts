@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { rm } from "node:fs/promises"
 import type { BarView } from "../src/bar"
-import { main, normalizeFilter, type Effects } from "../src/cli"
+import { main, type Effects } from "../src/cli"
 import { BAR_FILE, CACHE_FILE, CONFIG_FILE, MENU_FILE, TOKEN_FILE, saveToken } from "../src/config"
 
 // ------------------------------------------------------------------ harness
@@ -86,18 +86,6 @@ const PROJECTS = [
 function connected(tasks: unknown[] = [TASK]) {
   api(get("/tasks", { body: { results: tasks } }), get("/tasks/filter", { body: { results: tasks } }), get("/projects", { body: { results: PROJECTS } }))
 }
-
-// -------------------------------------------------------------- normalizeFilter
-
-test("the words that mean “no filter” all reach the same empty query", () => {
-  for (const input of ["", "   ", "*", "all", "ALL", " All "]) expect(normalizeFilter(input)).toBe("")
-})
-
-test("a real query keeps its shape, minus the surrounding space", () => {
-  expect(normalizeFilter("  today | overdue  ")).toBe("today | overdue")
-  expect(normalizeFilter("#All Hands")).toBe("#All Hands")
-  expect(normalizeFilter("all today")).toBe("all today")
-})
 
 // -------------------------------------------------------------------- dispatch
 

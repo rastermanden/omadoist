@@ -275,3 +275,39 @@ test("labels are shown the way Todoist writes them", () => {
   expect(Model.labelLine({ labels: [] })).toBe("")
   expect(Model.labelLine(null)).toBe("")
 })
+
+// ------------------------------------------------------------ saved filters
+
+function withFilters(filters: unknown, filter = "") {
+  return Model.parseView(JSON.stringify({ connected: true, tasks: [], filter, filters }))
+}
+
+test("the chip matching the filter in force is the one marked", () => {
+  const parsed = withFilters(
+    [{ name: "Today", query: "today" }, { name: "All", query: "" }],
+    "today",
+  )
+  expect(parsed.filters).toEqual([
+    { name: "Today", query: "today", active: true },
+    { name: "All", query: "", active: false },
+  ])
+})
+
+test("with nothing filtered it is the all-tasks chip that is marked", () => {
+  const parsed = withFilters([{ name: "Today", query: "today" }, { name: "All", query: "" }])
+  expect(parsed.filters.map((saved: { active: boolean }) => saved.active)).toEqual([false, true])
+})
+
+test("a malformed chip is dropped rather than drawn blank", () => {
+  const parsed = withFilters(["nope", null, { query: "nameless" }, { name: "  " }, { name: "Today", query: "today" }])
+  expect(parsed.filters).toEqual([{ name: "Today", query: "today", active: false }])
+  expect(Model.parseView(JSON.stringify({ filters: "today" })).filters).toEqual([])
+  expect(Model.emptyView().filters).toEqual([])
+})
+
+test("a single chip is not a choice, so the row stays out of the way", () => {
+  expect(Model.savedFilters(withFilters([{ name: "Today", query: "today" }]))).toEqual([])
+  expect(Model.savedFilters(withFilters([]))).toEqual([])
+  expect(Model.savedFilters(null)).toEqual([])
+  expect(Model.savedFilters(withFilters([{ name: "A", query: "a" }, { name: "B", query: "b" }]))).toHaveLength(2)
+})

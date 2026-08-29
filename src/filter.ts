@@ -2,6 +2,13 @@
 // "the search query is incorrect"; this works out which term it choked on and
 // what was probably meant, so the notification can say "did you mean …".
 
+// "all" and "*" mean no filter: the menu prompt cannot hand back an empty
+// string, and both read naturally on the command line too.
+export function normalizeFilter(query: string): string {
+  const text = query.trim()
+  return text === "" || text === "*" || text.toLowerCase() === "all" ? "" : text
+}
+
 export type FilterContext = { projects: string[]; labels: string[] }
 export type FilterDiagnosis = { unknown: string[]; suggestion: string | null }
 export type FilterError = { query: string; message: string; suggestion: string | null }

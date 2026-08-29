@@ -50,6 +50,14 @@ drift; bump both in the release commit.
   `config.json` turns it off, which keeps the text out of `bar.json` entirely.
   ([#11](https://github.com/rastermanden/omadoist/issues/11))
 
+- Saved filters. `config.json` keeps a named list — **Today**, **Overdue**,
+  **p1** and **All** to begin with — shown as chips above the task list and as
+  menu rows, with the one in force marked. Switching between "what's due today"
+  and "everything in #Work" was a full retype each way. A chip goes through the
+  same validation a typed query does, so a preset cannot leave the sync timer
+  failing, and the filter line stays the way to type anything else.
+  ([#10](https://github.com/rastermanden/omadoist/issues/10))
+
 ### Changed
 
 - The CLI is one callable function — `main(argv, effects)` behind an
