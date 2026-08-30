@@ -58,7 +58,7 @@ test("keys the tool does not know are dropped, not carried into the program", ()
 
 test("a fresh install has something to switch between", () => {
   const { config } = sanitizeConfig({})
-  expect(config.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "p1", "All"])
+  expect(config.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "All"])
   // "All" is the empty query, which is what marks it current when nothing is filtered.
   expect(config.filters.at(-1)!.query).toBe("")
 })

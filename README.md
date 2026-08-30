@@ -134,8 +134,9 @@ Any [Todoist filter query](https://todoist.com/help/articles/introduction-to-fil
 
 The ones you switch between live in `config.json` under `filters`, as a row of
 chips above the task list and as menu rows, with the one in force marked.
-A fresh install gets **Today**, **Overdue**, **p1** and **All**; edit the list
-to keep your own. A single chip is no choice at all, so the row hides itself
+A fresh install gets **Today**, **Overdue** and **All**; edit the list to keep
+your own — `{ "name": "p1", "query": "p1" }` for the urgent ones,
+`{ "name": "Work", "query": "#Work" }` for a project, and so on. A single chip is no choice at all, so the row hides itself
 until there are two.
 
 Anything else is typed: `f` in the panel or a click on the filter line, the
@@ -182,7 +183,6 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
   "filters": [
     { "name": "Today", "query": "today" },
     { "name": "Overdue", "query": "overdue" },
-    { "name": "p1", "query": "p1" },
     { "name": "All", "query": "" }
   ],
   "showDetails": true,

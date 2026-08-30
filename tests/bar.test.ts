@@ -187,5 +187,5 @@ test("the saved filters ride along for the panel's chips", () => {
 
 test("chips are worth showing before the first sync too — they come from the config", () => {
   const view = buildBarView(cache([]), config, false, now)
-  expect(view.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "p1", "All"])
+  expect(view.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "All"])
 })

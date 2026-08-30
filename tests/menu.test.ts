@@ -95,19 +95,19 @@ test("every saved filter is a row, and the one in force is marked", () => {
   const rows = buildRows([], projects, { ...config, filter: "overdue" })
   const saved = rows.filter((row) => row.id.startsWith("todoist.filter-"))
 
-  expect(saved.map((row) => row.entry.label)).toEqual(["Today", "Overdue ✓", "p1", "All"])
+  expect(saved.map((row) => row.entry.label)).toEqual(["Today", "Overdue ✓", "All"])
   expect(saved[0]?.entry.action).toBe("omadoist filter 'today'")
   // The subtitle is the chip's own query, so the menu shows what it would set.
   expect(saved[0]?.entry.description).toBe("today")
   // The all-tasks preset clears rather than sending an empty query.
-  expect(saved[3]?.entry.action).toBe("omadoist filter --clear")
-  expect(saved[3]?.entry.description).toBe("All active tasks")
+  expect(saved[2]?.entry.action).toBe("omadoist filter --clear")
+  expect(saved[2]?.entry.description).toBe("All active tasks")
 })
 
 test("with no filter set it is the all-tasks preset that is marked", () => {
   const rows = buildRows([], projects, config)
   const saved = rows.filter((row) => row.id.startsWith("todoist.filter-"))
-  expect(saved.map((row) => row.entry.label)).toEqual(["Today", "Overdue", "p1", "All ✓"])
+  expect(saved.map((row) => row.entry.label)).toEqual(["Today", "Overdue", "All ✓"])
 })
 
 test("a saved query cannot break out of its action", () => {
