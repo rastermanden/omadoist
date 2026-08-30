@@ -42,9 +42,14 @@ From a checkout instead:
 ./uninstall.sh        # removes timer, font, menu rows, launcher and the plugin; keeps your token
 ```
 
-Update a published install with `omarchy plugin update omadoist`. Remove it
-with `omadoist uninstall && omarchy plugin remove omadoist` — that keeps
-your token and config for a later reinstall; `omadoist uninstall --purge`
+Update a published install with `omarchy plugin update omadoist`. The CLI, the
+sync and the menu rows change straight away; the panel does not. The shell goes
+on serving the QML it has already compiled, and a rescan does not replace it, so
+a release that changes the panel needs `omarchy restart shell` — or the next
+login — before you see it. The same is true after `./install.sh`.
+
+Remove it with `omadoist uninstall && omarchy plugin remove omadoist` — that
+keeps your token and config for a later reinstall; `omadoist uninstall --purge`
 removes those too.
 
 ## Using it

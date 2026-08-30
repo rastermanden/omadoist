@@ -20,7 +20,9 @@ drift; bump both in the release commit.
   counted locally, so the panel and todoist.com never disagree; an account with
   Karma switched off has no line at all. `omadoist status` prints the same
   numbers, `"showKarma": false` turns the line and its request off. Bar view
-  version 4.
+  version 4. Updating an existing install shows the numbers in `omadoist status`
+  at once, but the line itself only after `omarchy restart shell`: the shell
+  keeps serving the panel it already compiled.
 
 ## 0.4.0 - 2026-08-30
 
