@@ -7,7 +7,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `manifest.json` and `package.json` carry the same version, and CI fails if they
 drift; bump both in the release commit.
 
-## Unreleased
+## 0.4.0 - 2026-08-30
 
 ### Added
 
@@ -77,11 +77,40 @@ drift; bump both in the release commit.
 
 ### Fixed
 
+- A machine without `notify-send` or `omarchy-menu` no longer takes `sync`,
+  `add` and `filter` down with it. `Bun.spawn` throws synchronously when the
+  executable is missing, and the notify in `sync` ran before the cache was
+  saved: the first sync that found a remote change threw after the fetch and
+  wrote nothing, so the widget froze on stale data while the timer failed every
+  five minutes with nothing in the UI to say why.
+  ([#2](https://github.com/rastermanden/omadoist/issues/2))
+
+- A hand-edited `config.json` is checked key by key instead of spread over the
+  defaults. `{"filter": null}` threw on every subcommand, `status` included, and
+  `{"limit": "lots"}` quietly emptied the panel and the menu while the bar count
+  still claimed a task. A bad value falls back to its default with a line on
+  stderr. ([#3](https://github.com/rastermanden/omadoist/issues/3))
+
+- `bar.json` and the cache are published by rename rather than truncated in
+  place, so the panel can no longer read a half-written file and flash "not
+  connected" until the next write.
+  ([#4](https://github.com/rastermanden/omadoist/issues/4))
+
+- Validating a filter asks the API for as many tasks as the caller wants
+  instead of always downloading two hundred to learn that a query parses — the
+  slowest part of every filter change, from the panel, the menu and the CLI.
+  ([#5](https://github.com/rastermanden/omadoist/issues/5))
+
+- The cache is as private as the token that fetched it. `~/.cache/omadoist`
+  landed at the process umask — typically world-readable — while holding every
+  task title, due date and project name matching the filter. The directory is
+  now 0700 and `tasks.json` and `bar.json` are 0600.
+  ([#14](https://github.com/rastermanden/omadoist/issues/14))
+
 - README: the settings section documents `menuIconFont`, the font the Omarchy
   menu row's glyph is drawn with, which has to be cleared before any other
   glyph shows up. It no longer claims the bar count is the full number of open
-  tasks — a sync fetches pages of 200 until it holds at least four times
-  `limit`, so a long list counts low.
+  tasks — a sync fetches at most four times `limit`, so a long list counts low.
   ([#13](https://github.com/rastermanden/omadoist/issues/13))
 - README screenshot retaken on a clean desktop.
 
