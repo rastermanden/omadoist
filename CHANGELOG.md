@@ -60,6 +60,12 @@ drift; bump both in the release commit.
 
 ### Changed
 
+- The saved-filter chips no longer ship a **p1** default. Priority is opt-in in
+  Todoist, and on an account that never sets one the chip emptied the panel on
+  every click, which reads as the tool breaking rather than as a filter
+  matching nothing. A fresh install now gets Today, Overdue and All; add `p1`
+  back through `filters` in `config.json` if you use priorities.
+
 - Setting a filter no longer announces itself. It notified on every successful
   change — telling you the thing you had just done, from the panel, the menu or
   the command line, where both the panel and the menu already show the filter.

@@ -69,12 +69,19 @@ const MAX_FILTER_NAME = 24
 
 export const DEFAULT_CONFIG: Config = {
   filter: "",
-  // What a fresh install is most likely to flip between. "All" is the empty
-  // query, the same thing `omadoist filter --clear` sets.
+  /*
+   * What a fresh install is most likely to flip between. "All" is the empty
+   * query, the same thing `omadoist filter --clear` sets.
+   *
+   * No `p1` chip: priority is opt-in in Todoist, and on an account that never
+   * sets one the chip empties the panel every time it is clicked, which reads
+   * as the tool breaking rather than as a filter matching nothing. Today and
+   * Overdue can come up empty too, but there "nothing" is the answer to the
+   * question, not an artefact of a scheme the account does not use.
+   */
   filters: [
     { name: "Today", query: "today" },
     { name: "Overdue", query: "overdue" },
-    { name: "p1", query: "p1" },
     { name: "All", query: "" },
   ],
   limit: 25,
