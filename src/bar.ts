@@ -1,5 +1,5 @@
 import type { Cache } from "./cache"
-import type { Config } from "./config"
+import type { Config, SavedFilter } from "./config"
 import type { FilterError } from "./filter"
 import { choicesFromPairs, type ProjectChoice } from "./projects"
 import type { SyncError } from "./sync"
@@ -71,6 +71,8 @@ export type BarView = {
   fetchedAt: string
   /** The Todoist filter query the rows were fetched with; empty means every active task. */
   filter: string
+  /** Saved filters as chips, in config order; the one matching `filter` is the current one. */
+  filters: SavedFilter[]
   /** Set when the last attempt to change the filter was rejected; cleared by the next write. */
   filterError: FilterError | null
   /**
@@ -151,6 +153,9 @@ export function buildBarView(
     fetchedAt: connected ? cache.fetchedAt : "",
     connected,
     filter: config.filter.trim(),
+    // From the config, not the account, so they are worth showing even before
+    // the first sync — the panel just has nothing to apply them to yet.
+    filters: config.filters.map((saved) => ({ ...saved })),
     filterError,
     // Nothing to be stale about before the account is connected.
     syncError: connected ? cache.lastError : null,

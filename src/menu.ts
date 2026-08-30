@@ -1,4 +1,4 @@
-import type { Config } from "./config"
+import type { Config, SavedFilter } from "./config"
 import { sortTasks, taskDetails } from "./tasks"
 import type { Task } from "./todoist"
 
@@ -14,6 +14,8 @@ const ICON_REFRESH = "\u{F0450}" // 󰑐 refresh
 const ICON_WEB = "\u{F059F}" // 󰖟 web
 const ICON_LINK = "\u{F0337}" // 󰌷 link-variant
 const ICON_FILTER = "\u{F0232}" // 󰈲 filter
+
+const ICON_FILTER_ON = "\u{F0233}" // 󰈳 filter-outline, for the one in force
 
 const MAX_LABEL = 64
 
@@ -125,6 +127,7 @@ export function buildRows(tasks: Task[], projects: Map<string, string>, config: 
         action: "omadoist filter --edit",
       },
     },
+    ...savedFilterRows(config),
     {
       id: "todoist.refresh",
       entry: {
@@ -144,6 +147,27 @@ export function buildRows(tasks: Task[], projects: Map<string, string>, config: 
   )
 
   return rows
+}
+
+/**
+ * One row per saved filter, so the menu can switch between them without the
+ * user retyping a query into a prompt. The one in force is marked rather than
+ * hidden: seeing which it is, is half of why the row exists.
+ */
+function savedFilterRows(config: Config): MenuRow[] {
+  const current = config.filter.trim()
+  return config.filters.map((saved: SavedFilter, index) => {
+    const active = saved.query === current
+    return {
+      id: `todoist.filter-${String(index + 1).padStart(2, "0")}`,
+      entry: {
+        icon: active ? ICON_FILTER_ON : ICON_FILTER,
+        label: truncate(active ? `${saved.name} ✓` : saved.name),
+        description: saved.query || "All active tasks",
+        action: saved.query ? `omadoist filter ${shellQuote(saved.query)}` : "omadoist filter --clear",
+      },
+    }
+  })
 }
 
 export function renderBlock(rows: MenuRow[]): string {

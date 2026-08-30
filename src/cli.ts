@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises"
 import { buildBarView } from "./bar"
 import { EMPTY_CACHE, loadCache, saveCache, type Cache } from "./cache"
 import { describeChanges, diffTasks } from "./changes"
-import { apiReason, diagnoseFilter, friendlyFilterError, type FilterError } from "./filter"
+import { apiReason, diagnoseFilter, friendlyFilterError, normalizeFilter, type FilterError } from "./filter"
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, CACHE_DIR, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
 import { ensureDir, writeAtomic } from "./files"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
@@ -351,13 +351,6 @@ async function cmdAdd(args: string[], fx: Effects): Promise<number> {
   const landed = choices.find((choice) => choice.id === String(task.project_id ?? ""))?.name ?? ""
   console.log(`Added “${title}”${landed ? ` to ${landed}` : ""}`)
   return cmdSync([], fx, { silentIds: [String(task.id)] })
-}
-
-// "all" and "*" mean no filter: the menu prompt cannot hand back an empty
-// string, and both read naturally on the command line too.
-export function normalizeFilter(query: string): string {
-  const text = query.trim()
-  return text === "" || text === "*" || text.toLowerCase() === "all" ? "" : text
 }
 
 async function cmdFilter(args: string[], fx: Effects): Promise<number> {

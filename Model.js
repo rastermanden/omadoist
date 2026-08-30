@@ -5,7 +5,7 @@ var TODOIST_TODAY = "https://app.todoist.com/app/today"
 var TODOIST_TASK = "https://app.todoist.com/app/task/"
 
 function emptyView() {
-  return { version: 3, generatedAt: "", fetchedAt: "", connected: false, filter: "", filterError: null, syncError: null, rolledForward: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
+  return { version: 3, generatedAt: "", fetchedAt: "", connected: false, filter: "", filters: [], filterError: null, syncError: null, rolledForward: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
 }
 
 function count(value, fallback) {
@@ -55,6 +55,25 @@ function parseProjects(raw) {
     var name = String(project.name || "").replace(/\s+/g, " ").trim()
     if (name === "") continue
     out.push({ id: String(project.id), name: name, inbox: project.inbox === true })
+  }
+  return out
+}
+
+/**
+ * The saved filters as chips, in the order config.json lists them, each marked
+ * with whether it is the one in force. A chip whose query is the current one
+ * is not a link to anywhere: the panel draws it as the state it is in.
+ */
+function parseFilters(raw, current) {
+  if (!Array.isArray(raw)) return []
+  var out = []
+  for (var i = 0; i < raw.length; i++) {
+    var saved = raw[i]
+    if (!saved || typeof saved !== "object") continue
+    var name = String(saved.name || "").replace(/\s+/g, " ").trim()
+    if (name === "") continue
+    var query = String(saved.query || "").trim()
+    out.push({ name: name, query: query, active: query === String(current || "").trim() })
   }
   return out
 }
@@ -115,6 +134,7 @@ function parseView(raw) {
   view.fetchedAt = typeof data.fetchedAt === "string" ? data.fetchedAt : ""
   view.connected = data.connected === true
   view.filter = typeof data.filter === "string" ? data.filter.trim() : ""
+  view.filters = parseFilters(data.filters, view.filter)
   view.filterError = parseFilterError(data.filterError)
   view.syncError = parseSyncError(data.syncError)
   view.rolledForward = parseRolledForward(data.rolledForward)
@@ -272,6 +292,15 @@ function labelLine(task) {
   return out.join("  ")
 }
 
+/**
+ * Chips are worth their row only when there is a choice in them: a single
+ * saved filter that is already in force says nothing the filter line does not.
+ */
+function savedFilters(view) {
+  var filters = (view && view.filters) || []
+  return filters.length > 1 ? filters : []
+}
+
 function subtitle(task) {
   if (!task) return ""
   return [task.due, task.project].filter(function(part) { return !!part }).join(" · ")
@@ -372,6 +401,7 @@ if (typeof module !== "undefined") {
     hasDetail: hasDetail,
     labelLine: labelLine,
     filterLabel: filterLabel,
+    savedFilters: savedFilters,
     defaultProjectId: defaultProjectId,
     projectOptions: projectOptions,
     projectName: projectName,

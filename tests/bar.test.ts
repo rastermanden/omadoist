@@ -177,3 +177,15 @@ test("showTaskDetails off keeps the notes out of bar.json entirely", () => {
   expect(view.tasks[0]!.description).toBe("")
   expect(view.tasks[0]!.labels).toEqual([])
 })
+
+// ----------------------------------------------------------- saved filters
+
+test("the saved filters ride along for the panel's chips", () => {
+  const view = buildBarView(cache([]), { ...config, filter: "overdue" }, true, now)
+  expect(view.filters).toEqual(DEFAULT_CONFIG.filters)
+})
+
+test("chips are worth showing before the first sync too — they come from the config", () => {
+  const view = buildBarView(cache([]), config, false, now)
+  expect(view.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "p1", "All"])
+})

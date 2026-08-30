@@ -58,6 +58,9 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property color dimmer: Qt.darker(foreground, 1.7)
   readonly property color hoverFill: Style.hoverFillFor(foreground, Color.accent)
+  // The chip in force is filled rather than outlined; the rest keep a hairline.
+  readonly property color chipFill: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18)
+  readonly property color chipEdge: Qt.rgba(dimmer.r, dimmer.g, dimmer.b, 0.6)
 
   property var view: Model.emptyView()
   // No bar.json yet: the plugin was just added and `omadoist setup` has not run.
@@ -86,6 +89,9 @@ Panel {
   property bool filtering: false
   property bool filterBusy: false
   readonly property string filterLabel: Model.filterLabel(view)
+  // Saved filters as chips. The filter line below them stays the way to type
+  // anything else; these are just the ones worth not retyping.
+  readonly property var savedFilters: Model.savedFilters(view)
   // The account's projects, Inbox first, as the new-task picker offers them.
   readonly property var projectOptions: Model.projectOptions(view)
   // Which project the next task lands in; empty leaves the choice to Todoist.
@@ -520,6 +526,56 @@ Panel {
 
         PanelSeparator {
           foreground: root.foreground
+        }
+
+        // ---------- Saved filters: the switch that used to be a retype ----------
+        Flow {
+          visible: root.connected && !root.filtering && root.savedFilters.length > 0
+          width: parent.width
+          spacing: Style.space(6)
+
+          Repeater {
+            model: root.savedFilters
+
+            delegate: Rectangle {
+              required property var modelData
+
+              radius: height / 2
+              implicitWidth: chipLabel.implicitWidth + Style.space(20)
+              implicitHeight: chipLabel.implicitHeight + Style.space(8)
+              color: modelData.active ? root.chipFill
+                : chipMouse.containsMouse ? root.hoverFill
+                : "transparent"
+              border.width: 1
+              border.color: modelData.active ? Color.accent : root.chipEdge
+
+              Text {
+                id: chipLabel
+                anchors.centerIn: parent
+                text: modelData.name
+                color: modelData.active ? Color.accent : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: modelData.active
+              }
+
+              MouseArea {
+                id: chipMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                // The one in force is the state, not a link: clicking it again
+                // would be a round trip to Todoist for the list already shown.
+                onClicked: if (!parent.modelData.active) root.applyFilter(parent.modelData.query)
+              }
+
+              PanelToolTip {
+                visible: chipMouse.containsMouse && !parent.modelData.active
+                text: parent.modelData.query === "" ? "All active tasks" : parent.modelData.query
+                fontFamily: root.fontFamily
+              }
+            }
+          }
         }
 
         // ---------- Filter: what the list is showing; click or f to change ----------

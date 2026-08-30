@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { apiReason, closest, diagnoseFilter, friendlyFilterError } from "../src/filter"
+import { apiReason, closest, diagnoseFilter, friendlyFilterError, normalizeFilter } from "../src/filter"
 
 const ctx = { projects: ["Inbox", "Livsstil Hus", "Ødegård Septima"], labels: ["errand", "waiting"] }
 
@@ -56,4 +56,16 @@ test("the API reason is pulled out of the error body", () => {
   expect(apiReason('{"error":"The search query is incorrect","error_code":55}')).toBe("The search query is incorrect")
   expect(apiReason("not json")).toBe("")
   expect(apiReason(undefined)).toBe("")
+})
+
+// ------------------------------------------------------------ normalizeFilter
+
+test("the words that mean “no filter” all reach the same empty query", () => {
+  for (const input of ["", "   ", "*", "all", "ALL", " All "]) expect(normalizeFilter(input)).toBe("")
+})
+
+test("a real query keeps its shape, minus the surrounding space", () => {
+  expect(normalizeFilter("  today | overdue  ")).toBe("today | overdue")
+  expect(normalizeFilter("#All Hands")).toBe("#All Hands")
+  expect(normalizeFilter("all today")).toBe("all today")
 })
