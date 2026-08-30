@@ -146,15 +146,17 @@ Every route checks the query with Todoist before saving it, and a refused one co
 back in words with a fix one click away: `todya | overdeu` → *Did you mean
 “today | overdue”?*, `today or overdue` → `today | overdue`, `#Livstil` →
 `#Livsstil`. A project or label that doesn't exist gets a nudge too, since
-Todoist accepts it and simply matches nothing. Changing the filter never
-triggers a "remote changes" notification.
+Todoist accepts it and simply matches nothing. Setting a filter is otherwise
+silent — you just set it, and the panel and the menu both show what it is —
+and it never triggers a "remote changes" notification.
 
 ### Notifications
 
 `omadoist sync` diffs each fetch against the previous one. Tasks that
 appeared or vanished without this machine doing it produce one notification —
 *Todoist · 2 new, 1 done* with the titles. Completing or adding a task here is
-silent; failures always notify. Turn it off with `"notifyRemoteChanges": false`
+silent, and so is setting a filter; failures always notify, and so does a
+filter Todoist accepts but that matches nothing. Turn it off with `"notifyRemoteChanges": false`
 in `~/.config/omadoist/config.json`. Caveat: with a date-based filter, a task
 that stops matching looks like "done" to the diff.
 

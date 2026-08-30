@@ -426,7 +426,11 @@ async function cmdFilter(args: string[], fx: Effects): Promise<number> {
   }
   console.log(query ? `Filter set: ${query}${hint}` : "Filter cleared: all active tasks")
   if (suggestion) console.log(`  try: omadoist filter ${shellQuote(suggestion)}`)
-  fx.notify("Todoist filter", (query || "All active tasks") + hint)
+  // A filter that worked is not news: the user just set it, and the panel and
+  // the menu both show what it is. Only the near-miss is worth a popup — the
+  // query was accepted but matches nothing, and stdout goes nowhere when the
+  // change came from the panel or the menu.
+  if (hint) fx.notify("Todoist filter", (query || "All active tasks") + hint, "normal")
   // Everything may change now; that is the point, not remote news.
   return cmdSync([], fx, { notifyChanges: false })
 }

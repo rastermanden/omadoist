@@ -625,9 +625,10 @@ test("a query Todoist accepts lands in the config and re-syncs", async () => {
 
   expect((await Bun.file(CONFIG_FILE).json()).filter).toBe("today | overdue")
   expect((await barView()).filter).toBe("today | overdue")
-  expect(notifications[0]).toMatchObject({ title: "Todoist filter", body: "today | overdue" })
-  // The whole list turning over after a filter change is not remote news.
-  expect(notifications).toHaveLength(1)
+  // Nothing is said out loud: the user just set it, and both the panel and the
+  // menu already show what the filter is. The whole list turning over after a
+  // filter change is not remote news either.
+  expect(notifications).toEqual([])
 })
 
 test("a query Todoist refuses is explained in the bar view and never saved", async () => {
@@ -673,7 +674,11 @@ test("a filter naming a project the account does not have is set, with a nudge",
   expect(await main(["filter", "#Wrok"], fx)).toBe(0)
 
   expect((await Bun.file(CONFIG_FILE).json()).filter).toBe("#Wrok")
-  expect(notifications.at(-1)!.body).toContain("#Work")
+  // Accepted, but it matches nothing — the one case still worth a popup, since
+  // stdout goes nowhere when the change came from the panel or the menu.
+  expect(notifications).toHaveLength(1)
+  expect(notifications[0]).toMatchObject({ urgency: "normal" })
+  expect(notifications[0]!.body).toContain("#Work")
 })
 
 test("--edit asks through the menu, and a cancelled prompt changes nothing", async () => {
