@@ -60,6 +60,13 @@ drift; bump both in the release commit.
 
 ### Changed
 
+- Setting a filter no longer announces itself. It notified on every successful
+  change — telling you the thing you had just done, from the panel, the menu or
+  the command line, where both the panel and the menu already show the filter.
+  A refused query still notifies, and so does one Todoist accepts that matches
+  nothing (`#Wrok` when you have `#Work`), since that is news and stdout goes
+  nowhere when the change came from the panel.
+
 - The CLI is one callable function — `main(argv, effects)` behind an
   `import.meta.main` guard — rather than a module that ran at import and ended
   in `process.exit`, with every spawn and notification behind one injectable
