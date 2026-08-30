@@ -7,6 +7,21 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `manifest.json` and `package.json` carry the same version, and CI fails if they
 drift; bump both in the release commit.
 
+## Unreleased
+
+### Added
+
+- Your Todoist Karma, above the task list. Three numbers, all of them the
+  account's own: karma points and which way the last update moved them,
+  today's completions against the daily goal with a bar that fills as rows are
+  ticked off, and the current daily streak. The tooltips carry the rest — the
+  week against its goal, the best daily and weekly streaks, a day off that
+  cannot break the streak, vacation mode that has them paused. Nothing is
+  counted locally, so the panel and todoist.com never disagree; an account with
+  Karma switched off has no line at all. `omadoist status` prints the same
+  numbers, `"showKarma": false` turns the line and its request off. Bar view
+  version 4.
+
 ## 0.4.0 - 2026-08-30
 
 ### Added

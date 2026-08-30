@@ -139,6 +139,17 @@ export async function quickAddTask(token: string, text: string): Promise<Task> {
   })) as Task
 }
 
+/**
+ * The account's productivity stats: karma, the daily and weekly goals, the
+ * streaks, and how many tasks each of the last days closed. Everything the
+ * panel's header line shows, in one request. The payload is large and mostly
+ * per-project detail, so it arrives unnarrowed and `karmaFromStats` keeps the
+ * handful of fields that are drawn.
+ */
+export async function fetchStats(token: string): Promise<unknown> {
+  return await request(token, "/tasks/completed/stats")
+}
+
 /** Cheap round-trip used to validate a token before it is written to disk. */
 export async function verifyToken(token: string): Promise<void> {
   await request(token, "/tasks?limit=1")

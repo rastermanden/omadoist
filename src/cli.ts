@@ -8,6 +8,7 @@ import { describeChanges, diffTasks } from "./changes"
 import { apiReason, diagnoseFilter, friendlyFilterError, normalizeFilter, type FilterError } from "./filter"
 import { loadConfig, loadToken, saveToken, updateConfig, BAR_FILE, CACHE_DIR, MENU_FILE, TOKEN_FILE, CONFIG_FILE, type Config } from "./config"
 import { ensureDir, writeAtomic } from "./files"
+import { karmaFromStats } from "./karma"
 import { buildRows, buildUnauthenticatedRows, mergeIntoMenu, removeFromMenu, renderBlock, shellQuote } from "./menu"
 import { choicesFromPairs, inboxId, parseAddArgs, projectChoices, resolveProject, type ProjectChoice } from "./projects"
 import { spawnOptional } from "./proc"
@@ -15,7 +16,7 @@ import { hasProjectToken, withProject } from "./quickadd"
 import { formatDue } from "./tasks"
 import { setup, teardown } from "./setup"
 import { describeSyncError } from "./sync"
-import { closeTask, fetchLabels, fetchProjects, fetchTasks, quickAddTask, reopenTask, TodoistError, verifyToken, type Task } from "./todoist"
+import { closeTask, fetchLabels, fetchProjects, fetchStats, fetchTasks, quickAddTask, reopenTask, TodoistError, verifyToken, type Task } from "./todoist"
 
 const APP = "Todoist"
 
@@ -151,13 +152,22 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
   // in a subtitle: the new-task picker is filled from the same cache.
   let tasks: Task[]
   let choices: ProjectChoice[]
+  let karma = previous.karma
   try {
-    const [fetched, projects] = await Promise.all([
+    const [fetched, projects, stats] = await Promise.all([
       fetchTasks(token, config.filter, config.limit * 4),
       fetchProjects(token),
+      // The header line is the least of what a sync is for, so its request
+      // never takes the sync down with it: an account whose plan or region
+      // has no stats endpoint keeps the last numbers, or none, and the tasks
+      // still land. A rejected token fails the two calls above anyway.
+      config.showKarma
+        ? fetchStats(token).then((raw) => karmaFromStats(raw)).catch(() => previous.karma)
+        : Promise.resolve(null),
     ])
     tasks = fetched
     choices = projectChoices(projects)
+    karma = stats
   } catch (err) {
     // Nothing used to rewrite bar.json here, so the panel went on showing the
     // last good list with no sign that it had stopped moving. Keep the tasks —
@@ -186,6 +196,7 @@ async function cmdSync(args: string[], fx: Effects, { silentIds = [], notifyChan
     lastError: null,
     // An undo is about what this machine just did, not about the fetch.
     lastCompleted: previous.lastCompleted,
+    karma,
   }
   await saveCache(cache)
 
@@ -471,6 +482,12 @@ async function cmdStatus(): Promise<number> {
   // The last failure, so the answer to "why is this list old?" is here rather
   // than only in the journal.
   if (cache.lastError) console.log(`sync:    failing since ${cache.lastError.at} — ${cache.lastError.message}`)
+  const karma = config.showKarma ? cache.karma : null
+  if (karma) {
+    console.log(
+      `karma:   ${karma.points} points, ${karma.today}/${karma.dailyGoal} today, ${karma.week}/${karma.weeklyGoal} this week, ${karma.dailyStreak}-day streak`,
+    )
+  }
   return 0
 }
 

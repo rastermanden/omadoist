@@ -1,12 +1,13 @@
 import type { Cache } from "./cache"
 import type { Config, SavedFilter } from "./config"
 import type { FilterError } from "./filter"
+import type { Karma } from "./karma"
 import { choicesFromPairs, type ProjectChoice } from "./projects"
 import type { SyncError } from "./sync"
 import { formatDue, isOverdue, sortTasks } from "./tasks"
 import type { Task } from "./todoist"
 
-export const BAR_VIEW_VERSION = 3
+export const BAR_VIEW_VERSION = 4
 
 /** One row as the bar panel shows it. Everything is already a display string. */
 export type BarTask = {
@@ -86,6 +87,11 @@ export type BarView = {
   connected: boolean
   /** The account's projects, Inbox first, for the new-task picker. */
   projects: ProjectChoice[]
+  /**
+   * Todoist's karma, goals and streaks, or null when the account has Karma
+   * switched off, `showKarma` is false, or nothing has fetched them yet.
+   */
+  karma: Karma | null
   /** Open tasks in the cache, which may be more than the rows listed. */
   count: number
   overdue: number
@@ -160,6 +166,7 @@ export function buildBarView(
     // Nothing to be stale about before the account is connected.
     syncError: connected ? cache.lastError : null,
     rolledForward: null,
+    karma: null,
     projects: [],
     count: 0,
     overdue: 0,
@@ -169,6 +176,9 @@ export function buildBarView(
   if (!connected) return view
 
   view.projects = choicesFromPairs(cache.projects, cache.inboxProjectId)
+  // The cache may still hold the numbers from before the setting was turned
+  // off; the view is what the panel reads, so the switch is honoured here.
+  view.karma = config.showKarma ? cache.karma : null
 
   const projects = new Map(cache.projects)
   const rows = sortTasks(cache.tasks).map((task) => toBarTask(task, projects, now, config.showTaskDetails))

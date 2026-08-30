@@ -83,8 +83,31 @@ const PROJECTS = [
   { id: "p1", name: "Work" },
 ]
 
+const STATS = {
+  karma: 691.0,
+  karma_trend: "up",
+  days_items: [{ date: "2026-08-28", total_completed: 4 }],
+  week_items: [{ from: "2026-08-24", to: "2026-08-30", total_completed: 35 }],
+  goals: {
+    daily_goal: 5,
+    weekly_goal: 30,
+    ignore_days: [],
+    karma_disabled: 0,
+    vacation_mode: 0,
+    current_daily_streak: { count: 2 },
+    max_daily_streak: { count: 9 },
+    current_weekly_streak: { count: 1 },
+    max_weekly_streak: { count: 3 },
+  },
+}
+
 function connected(tasks: unknown[] = [TASK]) {
   api(get("/tasks", { body: { results: tasks } }), get("/tasks/filter", { body: { results: tasks } }), get("/projects", { body: { results: PROJECTS } }))
+}
+
+/** The productivity stats behind the karma line; unstubbed they simply 404. */
+function scoring(reply: Reply = { body: STATS }) {
+  api(get("/tasks/completed/stats", reply))
 }
 
 // -------------------------------------------------------------------- dispatch
@@ -218,6 +241,47 @@ test("sync writes the cache, the bar view and the menu block together", async ()
   expect(view.projects.map((choice) => choice.id)).toEqual(["p0", "p1"])
   expect(await Bun.file(MENU_FILE).text()).toContain("Water the plants")
   expect((await Bun.file(CACHE_FILE).json()).tasks).toHaveLength(1)
+})
+
+test("karma, the goal and the streak come down with the tasks", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  scoring()
+
+  expect(await main(["sync"], fx)).toBe(0)
+  expect((await barView()).karma).toMatchObject({ points: 691, trend: "up", today: 4, dailyGoal: 5, dailyStreak: 2 })
+})
+
+test("stats that fail keep the last numbers rather than taking the sync down", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  connected()
+  scoring()
+  await main(["sync"], fx)
+
+  // The next sync's stats call falls over; the tasks still land, and the
+  // header line goes on showing the score it had.
+  routes = []
+  connected([TASK, { id: "2", content: "Call the dentist" }])
+  scoring({ status: 500, text: "boom" })
+
+  expect(await main(["sync"], fx)).toBe(0)
+  const view = await barView()
+  expect(view.tasks).toHaveLength(2)
+  expect(view.karma).toMatchObject({ points: 691, dailyStreak: 2 })
+})
+
+test("showKarma off asks Todoist for nothing to score", async () => {
+  const { fx } = effects()
+  await saveToken("tok")
+  await Bun.write(CONFIG_FILE, JSON.stringify({ showKarma: false }))
+  connected()
+  scoring()
+
+  expect(await main(["sync"], fx)).toBe(0)
+  expect(requests.some((request) => request.url.pathname.endsWith("/completed/stats"))).toBe(false)
+  expect((await barView()).karma).toBeNull()
 })
 
 test("--open summons the menu", async () => {
