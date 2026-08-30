@@ -1,5 +1,6 @@
 import { CACHE_DIR, CACHE_FILE } from "./config"
 import { ensureDir, writeAtomic } from "./files"
+import { parseKarma, type Karma } from "./karma"
 import { parseSyncError, type SyncError } from "./sync"
 import type { Task } from "./todoist"
 
@@ -31,6 +32,13 @@ export type Cache = {
   lastError: SyncError | null
   /** Cleared once undone, so the same completion cannot be undone twice. */
   lastCompleted: Completion | null
+  /**
+   * Karma, goals and streaks as of the last sync that fetched them. Kept here
+   * rather than re-fetched per command so the panel has them the moment it
+   * opens, and carried over a failed stats request: a stale streak reads
+   * better than a header line that blinks out whenever the extra call fails.
+   */
+  karma: Karma | null
 }
 
 export const EMPTY_CACHE: Cache = {
@@ -40,6 +48,7 @@ export const EMPTY_CACHE: Cache = {
   inboxProjectId: "",
   lastError: null,
   lastCompleted: null,
+  karma: null,
 }
 
 function parseCompletion(raw: unknown): Completion | null {
@@ -66,6 +75,7 @@ export async function loadCache(): Promise<Cache> {
       inboxProjectId: typeof cached.inboxProjectId === "string" ? cached.inboxProjectId : "",
       lastError: parseSyncError(cached.lastError),
       lastCompleted: parseCompletion(cached.lastCompleted),
+      karma: parseKarma(cached.karma),
     }
   } catch {
     return { ...EMPTY_CACHE }

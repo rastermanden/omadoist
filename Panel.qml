@@ -71,6 +71,9 @@ Panel {
   readonly property string countText: showCount ? Model.countLabel(view) : ""
   readonly property string heroMeta: needsSetup ? "Not set up yet" : Model.heroMeta(view)
   readonly property string syncedLabel: Model.syncedLabel(view.fetchedAt, new Date())
+  // Todoist's own karma, today's goal and the streak, as three cells above the
+  // list. Empty — and so drawn as nothing — whenever there is no Karma to show.
+  readonly property var karmaCells: Model.karmaCells(view)
 
   // Task id → true while `omadoist done` is in flight. The row stays put,
   // ticked and struck through, until the next bar.json no longer lists it.
@@ -520,6 +523,85 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               onClicked: root.refresh()
+            }
+          }
+        }
+
+        // ---------- Karma: the account's own score, goal and streak ----------
+        // Todoist keeps these numbers; nothing here counts anything itself, so
+        // the panel and todoist.com always agree about how long the streak is.
+        Row {
+          id: karmaStrip
+          visible: root.karmaCells.length > 0
+          width: parent.width
+
+          Repeater {
+            model: root.karmaCells
+
+            delegate: Item {
+              id: karmaCell
+              required property var modelData
+
+              width: karmaStrip.width / Math.max(1, root.karmaCells.length)
+              implicitHeight: cellColumn.implicitHeight
+
+              Column {
+                id: cellColumn
+                width: parent.width
+                spacing: Style.space(3)
+
+                Text {
+                  text: karmaCell.modelData.value
+                  color: karmaCell.modelData.done ? Color.accent : root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.subtitle
+                  font.bold: true
+                  elide: Text.ElideRight
+                  width: parent.width
+                }
+
+                Text {
+                  text: karmaCell.modelData.label.toUpperCase()
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  font.letterSpacing: 1.2
+                  elide: Text.ElideRight
+                  width: parent.width
+                }
+
+                // Only the goal has progress to draw; the other cells keep the
+                // row's height with an empty slot rather than sitting higher.
+                Rectangle {
+                  width: parent.width - Style.space(10)
+                  height: Style.space(3)
+                  radius: height / 2
+                  color: Qt.rgba(root.dimmer.r, root.dimmer.g, root.dimmer.b, 0.35)
+                  visible: karmaCell.modelData.ratio >= 0
+
+                  Rectangle {
+                    width: Math.round(parent.width * Math.max(0, Math.min(1, karmaCell.modelData.ratio)))
+                    height: parent.height
+                    radius: parent.radius
+                    color: Color.accent
+
+                    Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                  }
+                }
+              }
+
+              MouseArea {
+                id: karmaMouse
+                anchors.fill: parent
+                hoverEnabled: true
+              }
+
+              PanelToolTip {
+                visible: karmaMouse.containsMouse
+                text: karmaCell.modelData.tooltip
+                fontFamily: root.fontFamily
+              }
             }
           }
         }

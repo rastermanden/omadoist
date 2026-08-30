@@ -5,7 +5,7 @@ var TODOIST_TODAY = "https://app.todoist.com/app/today"
 var TODOIST_TASK = "https://app.todoist.com/app/task/"
 
 function emptyView() {
-  return { version: 3, generatedAt: "", fetchedAt: "", connected: false, filter: "", filters: [], filterError: null, syncError: null, rolledForward: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
+  return { version: 4, generatedAt: "", fetchedAt: "", connected: false, filter: "", filters: [], filterError: null, syncError: null, rolledForward: null, karma: null, projects: [], count: 0, overdue: 0, today: 0, tasks: [] }
 }
 
 function count(value, fallback) {
@@ -116,6 +116,29 @@ function parseRolledForward(raw) {
   return { id: id, title: String(raw.title || ""), due: String(raw.due || "") }
 }
 
+/**
+ * Todoist's karma, goals and streaks as `omadoist sync` wrote them. Null when
+ * the account has Karma switched off, when showKarma is off, or before the
+ * first sync — the header line then simply is not there.
+ */
+function parseKarma(raw) {
+  if (!raw || typeof raw !== "object") return null
+  return {
+    points: count(raw.points, 0),
+    trend: raw.trend === "up" || raw.trend === "down" ? String(raw.trend) : "flat",
+    today: count(raw.today, 0),
+    dailyGoal: count(raw.dailyGoal, 0),
+    week: count(raw.week, 0),
+    weeklyGoal: count(raw.weeklyGoal, 0),
+    dailyStreak: count(raw.dailyStreak, 0),
+    maxDailyStreak: count(raw.maxDailyStreak, 0),
+    weeklyStreak: count(raw.weeklyStreak, 0),
+    maxWeeklyStreak: count(raw.maxWeeklyStreak, 0),
+    restDay: raw.restDay === true,
+    vacation: raw.vacation === true
+  }
+}
+
 function parseView(raw) {
   var view = emptyView()
   var data
@@ -138,6 +161,7 @@ function parseView(raw) {
   view.filterError = parseFilterError(data.filterError)
   view.syncError = parseSyncError(data.syncError)
   view.rolledForward = parseRolledForward(data.rolledForward)
+  view.karma = parseKarma(data.karma)
   view.projects = parseProjects(data.projects)
   view.count = count(data.count, view.tasks.length)
   view.overdue = count(data.overdue, view.tasks.filter(function(task) { return task.overdue }).length)
@@ -206,6 +230,68 @@ function heroMeta(view) {
   if (view.overdue > 0) parts.push(plural(view.overdue, "overdue"))
   else if (view.today > 0) parts.push(plural(view.today, "today"))
   return parts.join(" · ")
+}
+
+function pluralize(n, one, many) {
+  return n + " " + (n === 1 ? one : many)
+}
+
+/**
+ * The header line above the task list: Todoist's karma, today's goal and the
+ * streak it is building, as three cells the panel repeats over. Empty when
+ * there is nothing to show — Karma switched off on the account, `showKarma`
+ * off, or no sync yet — and the panel then draws no line at all.
+ *
+ * Every number is Todoist's own. `ratio` is -1 for a cell with no progress to
+ * draw, so only the goal gets a bar.
+ */
+function karmaCells(view) {
+  var karma = view && view.connected ? view.karma : null
+  if (!karma) return []
+
+  var arrow = karma.trend === "up" ? " ↑" : karma.trend === "down" ? " ↓" : ""
+  var trend = karma.trend === "up" ? "trending up" : karma.trend === "down" ? "trending down" : "holding steady"
+
+  var goalSet = karma.dailyGoal > 0
+  var met = goalSet && karma.today >= karma.dailyGoal
+  var goalTip = pluralize(karma.today, "task", "tasks") + " completed today"
+  if (goalSet) goalTip += " of a goal of " + karma.dailyGoal
+  if (karma.weeklyGoal > 0) goalTip += " · " + karma.week + " of " + karma.weeklyGoal + " this week"
+  // A day off still counts what was done; it just cannot break the streak.
+  if (karma.restDay) goalTip += " · today is a day off, so the streak holds either way"
+
+  var streakTip = pluralize(karma.dailyStreak, "day", "days") + " in a row, best " + karma.maxDailyStreak
+  if (karma.maxWeeklyStreak > 0) {
+    streakTip += " · " + pluralize(karma.weeklyStreak, "week", "weeks") + " in a row, best " + karma.maxWeeklyStreak
+  }
+  if (karma.vacation) streakTip = "Vacation mode: streaks are paused. " + streakTip
+
+  return [
+    {
+      key: "karma",
+      value: String(karma.points) + arrow,
+      label: "karma",
+      tooltip: karma.points + " karma, " + trend,
+      ratio: -1,
+      done: false
+    },
+    {
+      key: "goal",
+      value: goalSet ? karma.today + " / " + karma.dailyGoal : String(karma.today),
+      label: karma.restDay ? "day off" : "today",
+      tooltip: goalTip,
+      ratio: goalSet ? Math.min(1, karma.today / karma.dailyGoal) : -1,
+      done: met
+    },
+    {
+      key: "streak",
+      value: String(karma.dailyStreak),
+      label: "day streak",
+      tooltip: streakTip,
+      ratio: -1,
+      done: false
+    }
+  ]
 }
 
 function pad(n) {
@@ -395,6 +481,7 @@ if (typeof module !== "undefined") {
     countLabel: countLabel,
     barTooltip: barTooltip,
     heroMeta: heroMeta,
+    karmaCells: karmaCells,
     syncedLabel: syncedLabel,
     syncWarning: syncWarning,
     subtitle: subtitle,

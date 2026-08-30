@@ -16,6 +16,8 @@ of the shell. The same list lives under **Todoist** in the Omarchy menu.
   you mean …" when it doesn't.
 - The list under **Todoist** in the Omarchy menu, so `Super+Space` → "todo"
   finds it too.
+- Your Todoist Karma above the list: points and which way they are going,
+  today's goal filling as you tick tasks off, and the streak it is building.
 - A five-minute background sync, and notifications only for tasks added or
   completed *somewhere else* — never for what you just did here.
 - Your API token stays in a mode-600 file; the widget itself never sees it.
@@ -67,6 +69,14 @@ A row shows its title, `due · project` and a priority dot, and nothing else:
 the list stays quiet. Move the cursor onto one — `j`/`k` or the mouse — and its
 description and labels appear under the list, so the rest of the rows do not
 move while you read.
+
+Above the list sit three numbers, all of them Todoist's own: your karma and its
+trend, today's completions against your daily goal with a bar that fills as you
+tick tasks off, and the current daily streak. Hover any of them for the rest —
+the week against its goal, the best streaks you have had, whether today is one
+of your days off or vacation mode has the streaks paused. Nothing is counted
+here, so the panel and todoist.com never disagree; an account with Karma turned
+off simply has no line, and `"showKarma": false` removes it too.
 
 A completed row stays ticked and struck through until the next sync drops it,
 and a strip under the list then offers **Undo** (or `u`) for twelve seconds —
@@ -187,6 +197,7 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
   ],
   "showDetails": true,
   "showTaskDetails": true,
+  "showKarma": true,
   "notifyRemoteChanges": true,
   "menuLabel": "Todoist",
   "menuIcon": "󰄲",
@@ -201,7 +212,9 @@ matching tasks counts low — and so does the "N more in Todoist" line under the
 list. `showDetails` adds the `due · project` subtitle
 in the menu. `showTaskDetails` is the other one: the task's own description and
 labels, under the list for the row the cursor is on — off keeps them out of
-`bar.json` altogether. `filters` are the saved queries above the list, up to
+`bar.json` altogether. `showKarma` is the karma, goal and streak line above the
+list; off skips the one extra request each sync makes for it and keeps the
+numbers out of `bar.json` as well. `filters` are the saved queries above the list, up to
 twelve; a malformed entry is skipped with a line on stderr rather than costing
 the rest, `"query": ""` (or `"all"`) is the all-tasks preset, and `[]` hides
 the chip row. `menuLabel`, `menuIcon` and `menuIconFont` are the **Todoist** row

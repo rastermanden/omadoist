@@ -48,6 +48,12 @@ export type Config = {
    */
   showTaskDetails: boolean
   /**
+   * Carry Todoist's karma, goals and streaks into the bar view, for the header
+   * line above the task list. Off skips the extra request every sync makes and
+   * keeps the numbers out of bar.json entirely.
+   */
+  showKarma: boolean
+  /**
    * Notify when a sync finds tasks added or completed elsewhere (phone, web).
    * Local completes and adds never notify: the user just did them.
    */
@@ -80,6 +86,7 @@ export const DEFAULT_CONFIG: Config = {
   limit: 25,
   showDetails: true,
   showTaskDetails: true,
+  showKarma: true,
   notifyRemoteChanges: true,
   menuLabel: "Todoist",
   // The Omarchy menu draws an extension row's icon as text, so the real Todoist
@@ -185,6 +192,7 @@ export function sanitizeConfig(raw: unknown): { config: Config; warnings: string
     limit: asCount(given.limit, "limit", DEFAULT_CONFIG.limit, warnings),
     showDetails: asBoolean(given.showDetails, "showDetails", DEFAULT_CONFIG.showDetails, warnings),
     showTaskDetails: asBoolean(given.showTaskDetails, "showTaskDetails", DEFAULT_CONFIG.showTaskDetails, warnings),
+    showKarma: asBoolean(given.showKarma, "showKarma", DEFAULT_CONFIG.showKarma, warnings),
     notifyRemoteChanges: asBoolean(given.notifyRemoteChanges, "notifyRemoteChanges", DEFAULT_CONFIG.notifyRemoteChanges, warnings),
     menuLabel: asString(given.menuLabel, "menuLabel", DEFAULT_CONFIG.menuLabel, warnings),
     menuIcon: asString(given.menuIcon, "menuIcon", DEFAULT_CONFIG.menuIcon, warnings),

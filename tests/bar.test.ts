@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { buildBarView, humanPriority, taskLabels, toBarTask, trimDescription } from "../src/bar"
 import type { Cache } from "../src/cache"
 import { DEFAULT_CONFIG } from "../src/config"
+import type { Karma } from "../src/karma"
 import type { Task } from "../src/todoist"
 
 const now = new Date(2026, 7, 29, 12, 0, 0) // 29 Aug 2026, local time
@@ -12,7 +13,7 @@ function task(id: string, content: string, extra: Partial<Task> = {}): Task {
 }
 
 function cache(tasks: Task[]): Cache {
-  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "", lastError: null, lastCompleted: null }
+  return { fetchedAt: "2026-08-29T09:30:00.000Z", tasks, projects: [["p1", "Work"]], inboxProjectId: "", lastError: null, lastCompleted: null, karma: null }
 }
 
 test("rows come out sorted the way the menu sorts them, with display strings ready", () => {
@@ -41,7 +42,7 @@ test("rows come out sorted the way the menu sorts them, with display strings rea
 
 test("the projects ride along for the new-task picker, Inbox first", () => {
   const view = buildBarView(
-    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0", lastError: null, lastCompleted: null },
+    { fetchedAt: "", tasks: [], projects: [["p1", "Work"], ["p0", "Inbox"]], inboxProjectId: "p0", lastError: null, lastCompleted: null, karma: null },
     config,
     true,
     now,
@@ -104,7 +105,7 @@ test("a task still listed after being completed is named as rolled forward", () 
     project_id: "p1",
     due: { date: "2026-08-30", is_recurring: true },
   }
-  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks: [recurring], projects: [["p1", "Livsstil"]], inboxProjectId: "p1", lastError: null, lastCompleted: null }
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks: [recurring], projects: [["p1", "Livsstil"]], inboxProjectId: "p1", lastError: null, lastCompleted: null, karma: null }
   const now = new Date("2026-08-29T10:00:00.000Z")
 
   const view = buildBarView(cache, DEFAULT_CONFIG, true, now, null, "r1")
@@ -122,7 +123,7 @@ test("a rolled-forward row is named even when it falls outside the shown limit",
     content: `Task ${i}`,
     due: { date: "2026-09-0" + (i + 1), is_recurring: true },
   }))
-  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks, projects: [], inboxProjectId: "", lastError: null, lastCompleted: null }
+  const cache: Cache = { fetchedAt: "2026-08-29T10:00:00.000Z", tasks, projects: [], inboxProjectId: "", lastError: null, lastCompleted: null, karma: null }
   const view = buildBarView(cache, { ...DEFAULT_CONFIG, limit: 1 }, true, new Date("2026-08-29T10:00:00.000Z"), null, "t4")
   expect(view.tasks).toHaveLength(1)
   expect(view.rolledForward?.id).toBe("t4")
@@ -188,4 +189,27 @@ test("the saved filters ride along for the panel's chips", () => {
 test("chips are worth showing before the first sync too — they come from the config", () => {
   const view = buildBarView(cache([]), config, false, now)
   expect(view.filters.map((saved) => saved.name)).toEqual(["Today", "Overdue", "p1", "All"])
+})
+
+const KARMA: Karma = {
+  points: 691,
+  trend: "up",
+  today: 4,
+  dailyGoal: 5,
+  week: 35,
+  weeklyGoal: 30,
+  dailyStreak: 2,
+  maxDailyStreak: 9,
+  weeklyStreak: 1,
+  maxWeeklyStreak: 3,
+  restDay: false,
+  vacation: false,
+}
+
+test("karma rides along for the header line, and stays out of it when switched off", () => {
+  const cached = { ...cache([]), karma: KARMA }
+  expect(buildBarView(cached, config, true, now).karma).toEqual(KARMA)
+  expect(buildBarView(cached, { ...config, showKarma: false }, true, now).karma).toBeNull()
+  // Nothing to score before the account is connected.
+  expect(buildBarView(cached, config, false, now).karma).toBeNull()
 })

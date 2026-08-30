@@ -311,3 +311,55 @@ test("a single chip is not a choice, so the row stays out of the way", () => {
   expect(Model.savedFilters(null)).toEqual([])
   expect(Model.savedFilters(withFilters([{ name: "A", query: "a" }, { name: "B", query: "b" }]))).toHaveLength(2)
 })
+
+const KARMA = {
+  points: 691,
+  trend: "up",
+  today: 4,
+  dailyGoal: 5,
+  week: 35,
+  weeklyGoal: 30,
+  dailyStreak: 2,
+  maxDailyStreak: 9,
+  weeklyStreak: 1,
+  maxWeeklyStreak: 3,
+  restDay: false,
+  vacation: false,
+}
+
+test("the karma line is three cells, and only the goal draws a bar", () => {
+  const cells = Model.karmaCells(view({ karma: KARMA }))
+  expect(cells.map((cell: { value: string }) => cell.value)).toEqual(["691 ↑", "4 / 5", "2"])
+  expect(cells.map((cell: { label: string }) => cell.label)).toEqual(["karma", "today", "day streak"])
+  expect(cells[1].ratio).toBeCloseTo(0.8)
+  expect(cells[0].ratio).toBe(-1)
+  expect(cells[2].ratio).toBe(-1)
+  expect(cells[1].done).toBe(false)
+  expect(cells[1].tooltip).toBe("4 tasks completed today of a goal of 5 · 35 of 30 this week")
+  expect(cells[2].tooltip).toBe("2 days in a row, best 9 · 1 week in a row, best 3")
+})
+
+test("a goal that is met is marked, and never overfills its bar", () => {
+  const cells = Model.karmaCells(view({ karma: { ...KARMA, today: 7 } }))
+  expect(cells[1].done).toBe(true)
+  expect(cells[1].ratio).toBe(1)
+})
+
+test("a day off says so rather than showing the goal as slipping", () => {
+  const cells = Model.karmaCells(view({ karma: { ...KARMA, today: 0, restDay: true } }))
+  expect(cells[1].label).toBe("day off")
+  expect(cells[1].tooltip).toContain("today is a day off")
+})
+
+test("vacation mode explains the streak that is standing still", () => {
+  const cells = Model.karmaCells(view({ karma: { ...KARMA, vacation: true } }))
+  expect(cells[2].tooltip).toStartWith("Vacation mode: streaks are paused.")
+})
+
+test("no karma, no line — switched off, not synced, or not connected", () => {
+  expect(Model.karmaCells(view({ karma: null }))).toEqual([])
+  expect(Model.karmaCells(view({ karma: "nonsense" }))).toEqual([])
+  expect(Model.karmaCells(view({ karma: KARMA, connected: false }))).toEqual([])
+  // A karma object with nothing in it still counts as zero, not as garbage.
+  expect(Model.karmaCells(view({ karma: {} }))[0].value).toBe("0")
+})
