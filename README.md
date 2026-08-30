@@ -196,9 +196,9 @@ Bar-widget settings live on the layout entry in `~/.config/omarchy/shell.json`
 
 `limit` caps the rows in the menu and the panel (sorted overdue → today →
 later, then priority); the bar count is however many tasks the last sync
-fetched — pages of 200 until it holds at least four times `limit` — so an
-account with hundreds of matching tasks counts low, and so does the "N more in
-Todoist" line under the list. `showDetails` adds the `due · project` subtitle
+fetched, which stops at four times `limit`, so an account with hundreds of
+matching tasks counts low — and so does the "N more in Todoist" line under the
+list. `showDetails` adds the `due · project` subtitle
 in the menu. `showTaskDetails` is the other one: the task's own description and
 labels, under the list for the row the cursor is on — off keeps them out of
 `bar.json` altogether. `filters` are the saved queries above the list, up to

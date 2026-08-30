@@ -1,6 +1,6 @@
 {
   "name": "omadoist",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Todoist in the Omarchy bar and menu: list your tasks and tick them done",
