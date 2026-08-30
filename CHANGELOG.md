@@ -7,7 +7,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 `manifest.json` and `package.json` carry the same version, and CI fails if they
 drift; bump both in the release commit.
 
-## Unreleased
+## 0.4.0 - 2026-08-30
 
 ### Added
 
